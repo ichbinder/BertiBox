@@ -1,0 +1,16 @@
+[Unit]
+Description=BertiBox MP3 Player Service
+After=network.target bertibox-web.service
+
+[Service]
+Type=simple
+User=jakob
+WorkingDirectory=/home/jakob/git/BertiBox
+ExecStart=/home/jakob/git/BertiBox/venv/bin/python3 /home/jakob/git/BertiBox/main.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/pi/bertibox-player.log
+StandardError=append:/home/pi/bertibox-player.log
+
+[Install]
+WantedBy=multi-user.target 

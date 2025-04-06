@@ -1,0 +1,16 @@
+[Unit]
+Description=BertiBox Web Interface Service
+After=network.target bertibox-player.service
+
+[Service]
+Type=simple
+User=jakob
+WorkingDirectory=/home/jakob/git/BertiBox
+ExecStart=/home/jakob/git/BertiBox/venv/bin/python3 /home/jakob/git/BertiBox/web_interface.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/pi/bertibox-web.log
+StandardError=append:/home/pi/bertibox-web.log
+
+[Install]
+WantedBy=multi-user.target 
