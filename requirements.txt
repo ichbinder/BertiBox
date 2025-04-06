@@ -1,0 +1,5 @@
+Flask==2.0.1
+RPi.GPIO==0.7.0
+mfrc522==0.0.7
+pygame==2.1.2
+SQLAlchemy==1.4.23 
