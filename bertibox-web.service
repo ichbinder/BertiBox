@@ -4,9 +4,9 @@ After=network.target bertibox-player.service
 
 [Service]
 Type=simple
-User=jakob
-WorkingDirectory=/home/jakob/git/BertiBox
-ExecStart=/home/jakob/git/BertiBox/venv/bin/python3 /home/jakob/git/BertiBox/web_interface.py
+User=pi
+WorkingDirectory=/home/pi/git/BertiBox
+ExecStart=/home/pi/git/BertiBox/venv/bin/python3 /home/pi/git/BertiBox/web_interface.py
 Restart=always
 RestartSec=10
 StandardOutput=append:/home/pi/bertibox-web.log
