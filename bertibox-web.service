@@ -1,6 +1,6 @@
 [Unit]
 Description=BertiBox Web Interface Service
-After=network.target bertibox-player.service
+After=network.target
 
 [Service]
 Type=simple

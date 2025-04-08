@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BertiBox Player</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .player-container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            width: 90%;
+            max-width: 600px;
+            text-align: center;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        #status {
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 5px;
+            min-height: 40px; /* Ensure space even when empty */
+        }
+        #status.no-tag {
+            background-color: #eee;
+            color: #666;
+        }
+        #status.tag-present {
+            background-color: #e7f3ff;
+            color: #0056b3;
+        }
+        #current-tag, #current-track, #playlist-name {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        #current-track {
+             min-height: 1.2em; /* Reserve space */
+             color: #555;
+        }
+        .controls button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+        .controls button:hover {
+            background-color: #0056b3;
+        }
+        .controls button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #playlist-view {
+            margin-top: 30px;
+            text-align: left;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+         #playlist-view ul {
+             list-style-type: none;
+             padding: 0;
+             margin: 0;
+         }
+         #playlist-view li {
+             padding: 8px 12px;
+             border-bottom: 1px solid #eee;
+             cursor: pointer;
+             transition: background-color 0.2s ease;
+         }
+         #playlist-view li:last-child {
+             border-bottom: none;
+         }
+         #playlist-view li:hover {
+              background-color: #e9ecef;
+         }
+         #playlist-view li.playing {
+             background-color: #cce5ff;
+             font-weight: bold;
+             color: #004085;
+         }
+         .nav-link {
+            margin-top: 20px;
+            display: inline-block;
+            color: #007bff;
+            text-decoration: none;
+         }
+         .nav-link:hover {
+            text-decoration: underline;
+         }
+         .volume-control {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 15px;
+         }
+         .volume-control label {
+            margin-right: 10px;
+         }
+         #volume-slider {
+            width: 50%; /* Adjust width */
+            cursor: pointer;
+         }
+         .sleep-timer-controls {
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+         }
+         #sleep-timer-status {
+            margin-left: 15px;
+            font-style: italic;
+            color: #666;
+         }
+    </style>
+</head>
+<body>
+    <div class="player-container">
+        <h1>BertiBox Player</h1>
+
+        <div id="status" class="no-tag">
+            <div id="current-tag">Kein Tag erkannt</div>
+            <div id="playlist-name">Keine Playlist geladen</div>
+            <div id="current-track">--</div>
+        </div>
+
+        <div class="controls">
+            <button id="prev-btn" disabled>⏮️</button>
+            <button id="play-pause-btn" disabled>▶️</button>
+            <button id="next-btn" disabled>⏭️</button>
+        </div>
+
+        <!-- Volume Control -->
+        <div class="volume-control">
+            <label for="volume-slider">🔊</label>
+            <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1.0">
+        </div>
+
+        <!-- Sleep Timer Controls -->
+        <div class="sleep-timer-controls">
+            <button class="btn btn-outline-secondary btn-sm" id="sleep-timer-btn" data-bs-toggle="modal" data-bs-target="#sleepTimerModal">
+                <i class="bi bi-clock"></i> Schlaf Timer
+            </button>
+            <span id="sleep-timer-status"></span>
+            <button class="btn btn-outline-danger btn-sm ms-2" id="cancel-sleep-timer-btn" style="display: none;">
+                 <i class="bi bi-x-lg"></i> Timer abbrechen
+            </button>
+        </div>
+
+        <div id="playlist-view">
+            <h2>Playlist</h2>
+            <ul id="playlist-items">
+                <li>Keine Playlist geladen.</li>
+            </ul>
+        </div>
+         <a href="/" class="nav-link">Zur Verwaltung</a>
+    </div>
+
+    <!-- Sleep Timer Modal -->
+    <div class="modal fade" id="sleepTimerModal" tabindex="-1" aria-labelledby="sleepTimerModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="sleepTimerModalLabel">Schlaf Timer einstellen</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Wiedergabe pausiert in:</p>
+                    <button class="btn btn-primary me-2" onclick="setSleepTimer(15)">15 Min</button>
+                    <button class="btn btn-primary me-2" onclick="setSleepTimer(20)">20 Min</button>
+                    <button class="btn btn-primary me-2" onclick="setSleepTimer(30)">30 Min</button>
+                    <button class="btn btn-primary" onclick="setSleepTimer(45)">45 Min</button>
+                    <hr>
+                    <div class="input-group mt-3">
+                        <input type="number" class="form-control" id="customSleepMinutes" placeholder="Minuten" min="1">
+                        <button class="btn btn-success" type="button" id="setCustomSleepTimerBtn">Setzen</button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const socket = io(); // Connects to the server hosting this page
+
+        const statusDiv = document.getElementById('status');
+        const currentTagDiv = document.getElementById('current-tag');
+        const playlistNameDiv = document.getElementById('playlist-name');
+        const currentTrackDiv = document.getElementById('current-track');
+        const playPauseBtn = document.getElementById('play-pause-btn');
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const playlistItemsUl = document.getElementById('playlist-items');
+        const volumeSlider = document.getElementById('volume-slider');
+        const sleepTimerStatus = document.getElementById('sleep-timer-status');
+        const cancelSleepTimerBtn = document.getElementById('cancel-sleep-timer-btn');
+        let sleepTimerModal = null;
+        let sleepCountdownInterval = null; // Stores the setInterval ID
+
+        let currentPlaylistItems = []; // Store items for click handling
+        let currentTrackIndex = -1;
+        let currentSleepTimerRemaining = null; // Store remaining seconds
+
+        // Initialize Modal
+        document.addEventListener('DOMContentLoaded', function() {
+            if (document.getElementById('sleepTimerModal')) {
+                 sleepTimerModal = new bootstrap.Modal(document.getElementById('sleepTimerModal'));
+            }
+        });
+
+        function updatePlayerUI(status) {
+            console.log("Received status update:", status);
+
+            // Update Tag Info
+            if (status.tag_id) {
+                currentTagDiv.textContent = `Tag: ${status.tag_id}`; // Show raw ID for now
+                statusDiv.classList.remove('no-tag');
+                statusDiv.classList.add('tag-present');
+            } else {
+                currentTagDiv.textContent = 'Kein Tag erkannt';
+                 statusDiv.classList.add('no-tag');
+                statusDiv.classList.remove('tag-present');
+            }
+
+            // Update Playlist Info & List
+            playlistItemsUl.innerHTML = ''; // Clear current list
+            currentPlaylistItems = []; // Clear local store
+            currentTrackIndex = status.current_track_index; // Update index
+
+            if (status.playlist && status.playlist.items && status.playlist.items.length > 0) {
+                // --- Display Tag Name Directly --- 
+                let displayText = 'Keine Informationen'; // Fallback
+                if (status.tag_name) {
+                    displayText = status.tag_name; // Use the actual tag name
+                }
+                playlistNameDiv.textContent = displayText;
+
+                currentPlaylistItems = status.playlist.items; // Store for clicks
+
+                status.playlist.items.forEach((item, index) => {
+                    const li = document.createElement('li');
+                    li.textContent = `${item.position + 1}. ${item.mp3_file}`;
+                    li.dataset.index = index; // Store index for click handling
+
+                    if (index === status.current_track_index && (status.is_playing || status.is_paused)) {
+                        li.classList.add('playing');
+                         currentTrackDiv.textContent = `Aktuell: ${item.mp3_file}`;
+                    } else if (index === status.current_track_index && !(status.is_playing || status.is_paused) && status.current_track_filename) {
+                        // Case where track is loaded but stopped (e.g., after tag removed)
+                         currentTrackDiv.textContent = `Geladen: ${item.mp3_file}`;
+                    }
+
+
+                    li.addEventListener('click', () => {
+                        console.log(`Clicked item index: ${index}`);
+                        socket.emit('play_track', { index: index });
+                    });
+                    playlistItemsUl.appendChild(li);
+                });
+                 // Enable controls if there's a playlist
+                 playPauseBtn.disabled = false;
+                 prevBtn.disabled = false;
+                 nextBtn.disabled = false;
+
+            } else if (status.playlist) { // Playlist exists but is empty
+                // --- Display Tag Name Directly (Empty Playlist) --- 
+                let displayText = 'Playlist (Leer)'; // Fallback
+                if (status.tag_name) {
+                    displayText = `${status.tag_name} (Leer)`; // Use the actual tag name + indicator
+                }
+                playlistNameDiv.textContent = displayText;
+
+                const li = document.createElement('li');
+                li.textContent = 'Diese Playlist ist leer.';
+                playlistItemsUl.appendChild(li);
+                 currentTrackDiv.textContent = '--';
+                 // Disable controls if playlist is empty
+                 playPauseBtn.disabled = true;
+                 prevBtn.disabled = true;
+                 nextBtn.disabled = true;
+            }
+             else {
+                playlistNameDiv.textContent = 'Keine Playlist geladen';
+                 const li = document.createElement('li');
+                li.textContent = 'Keine Playlist geladen.';
+                playlistItemsUl.appendChild(li);
+                 currentTrackDiv.textContent = '--';
+                 // Disable controls if no playlist
+                 playPauseBtn.disabled = true;
+                 prevBtn.disabled = true;
+                 nextBtn.disabled = true;
+            }
+
+             // Ensure current track display is cleared if nothing is playing/loaded
+             if (!status.current_track_filename && !status.is_playing && !status.is_paused) {
+                  currentTrackDiv.textContent = '--';
+             }
+
+
+            // Update Controls State
+            if (status.is_playing && !status.is_paused) {
+                playPauseBtn.textContent = '⏸️'; // Pause symbol
+            } else {
+                playPauseBtn.textContent = '▶️'; // Play symbol
+            }
+
+             // Disable prev/next if playlist is very short or empty
+             const canGoPrev = status.playlist && status.playlist.items && status.playlist.items.length > 1;
+             const canGoNext = status.playlist && status.playlist.items && status.playlist.items.length > 1;
+             prevBtn.disabled = !canGoPrev;
+             nextBtn.disabled = !canGoNext;
+             // Still keep play/pause enabled if a playlist is loaded, even if empty (to potentially load a tag again)
+             playPauseBtn.disabled = !(status.playlist);
+
+             // Update Volume Slider
+             if (status.volume !== undefined && status.volume !== null) {
+                 volumeSlider.value = status.volume;
+             }
+
+             // Update Sleep Timer Display
+             currentSleepTimerRemaining = status.sleep_timer_remaining;
+             updateSleepTimerDisplay();
+
+        }
+
+        // --- SocketIO Event Listeners ---
+        socket.on('connect', () => {
+            console.log('Connected to server via Socket.IO');
+            socket.emit('request_player_status'); // Request status on connect
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+            // Optionally gray out the interface or show a disconnected message
+             currentTagDiv.textContent = 'Verbindung getrennt';
+             playlistNameDiv.textContent = '';
+             currentTrackDiv.textContent = '--';
+             playlistItemsUl.innerHTML = '<li>Verbindung zum Server verloren.</li>';
+             playPauseBtn.disabled = true;
+             prevBtn.disabled = true;
+             nextBtn.disabled = true;
+        });
+
+        socket.on('player_status_update', (status) => {
+            updatePlayerUI(status);
+        });
+
+        // --- Control Button Event Listeners ---
+        playPauseBtn.addEventListener('click', () => {
+            console.log("Play/Pause button clicked");
+             // Determine whether to send 'pause' or 'resume' based on current state
+             // The backend handles the toggle logic more robustly now.
+             // We just send a generic toggle or specific commands. Let's use play_pause for toggle.
+            socket.emit('play_pause');
+
+             // Alternative: More specific commands based on button text maybe?
+             // if (playPauseBtn.textContent === '⏸️') {
+             //     socket.emit('pause');
+             // } else {
+             //     socket.emit('resume');
+             // }
+        });
+
+        prevBtn.addEventListener('click', () => {
+            console.log("Previous button clicked");
+            socket.emit('previous_track');
+        });
+
+        nextBtn.addEventListener('click', () => {
+            console.log("Next button clicked");
+            socket.emit('next_track');
+        });
+
+        volumeSlider.addEventListener('input', (event) => {
+            const volume = event.target.value;
+            console.log(`Volume changed: ${volume}`);
+            socket.emit('set_volume', { volume: volume });
+        });
+
+        // Helper function to format seconds into MM:SS
+        function formatTime(seconds) {
+             if (seconds === null || seconds === undefined || seconds < 0) {
+                 return "";
+             }
+             const minutes = Math.floor(seconds / 60);
+             const remainingSeconds = Math.floor(seconds % 60);
+             return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+
+        // Update the sleep timer display and manage countdown
+        function updateSleepTimerDisplay() {
+             // Clear existing interval
+            if (sleepCountdownInterval) {
+                clearInterval(sleepCountdownInterval);
+                sleepCountdownInterval = null;
+            }
+
+             if (currentSleepTimerRemaining !== null && currentSleepTimerRemaining > 0) {
+                 sleepTimerStatus.textContent = `Pausiert in: ${formatTime(currentSleepTimerRemaining)}`;
+                 cancelSleepTimerBtn.style.display = 'inline-block'; // Show cancel button
+
+                 // Start local countdown
+                sleepCountdownInterval = setInterval(() => {
+                    currentSleepTimerRemaining -= 1;
+                    if (currentSleepTimerRemaining >= 0) {
+                         sleepTimerStatus.textContent = `Pausiert in: ${formatTime(currentSleepTimerRemaining)}`;
+                    } else {
+                        // Timer expired locally, clear interval and display
+                        sleepTimerStatus.textContent = "";
+                        cancelSleepTimerBtn.style.display = 'none';
+                        clearInterval(sleepCountdownInterval);
+                        sleepCountdownInterval = null;
+                    }
+                }, 1000);
+            } else {
+                sleepTimerStatus.textContent = "";
+                cancelSleepTimerBtn.style.display = 'none'; // Hide cancel button
+                currentSleepTimerRemaining = null;
+             }
+        }
+
+        // --- Sleep Timer Controls --- 
+        function setSleepTimer(minutes) {
+            console.log(`Setting sleep timer for ${minutes} minutes`);
+            socket.emit('set_sleep_timer', { duration: minutes });
+            if (sleepTimerModal) {
+                sleepTimerModal.hide();
+            }
+        }
+
+        cancelSleepTimerBtn.addEventListener('click', () => {
+            console.log("Cancel sleep timer clicked");
+            socket.emit('cancel_sleep_timer');
+        });
+
+        // Add event listener for the custom timer input button
+        document.getElementById('setCustomSleepTimerBtn').addEventListener('click', () => {
+            const customMinutesInput = document.getElementById('customSleepMinutes');
+            const minutes = parseInt(customMinutesInput.value, 10);
+
+            if (!isNaN(minutes) && minutes > 0) {
+                setSleepTimer(minutes);
+            } else {
+                alert("Bitte eine gültige Anzahl Minuten (größer als 0) eingeben.");
+                customMinutesInput.value = ""; // Clear invalid input
+            }
+        });
+
+        // Initial request for status when page loads
+        // socket.emit('request_player_status'); // Moved to on 'connect'
+
+    </script>
+</body>
+</html> 

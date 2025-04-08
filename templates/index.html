@@ -22,6 +22,27 @@
     </style>
 </head>
 <body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">BertiBox</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link active" aria-current="page" href="/">Verwaltung</a>
+                    </li>
+                    {% if player_available %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/player">Player</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
     <div class="container mt-4">
         <h1>BertiBox - Playlist Manager</h1>
         
@@ -37,7 +58,7 @@
         
         <!-- Tags und Playlists -->
         <div class="row">
-            <div class="col-md-6">
+            <div class="col-md-6 mb-4 mb-md-0">
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <span>Tags</span>
@@ -68,6 +89,29 @@
                             </button>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MP3 Upload Section -->
+    <div class="container mt-4">
+        <div class="card">
+            <div class="card-header">
+                MP3 Dateien hochladen
+            </div>
+            <div class="card-body">
+                <div id="drop-zone" class="border rounded p-5 text-center mb-3" style="border-style: dashed !important;">
+                    <p>MP3-Dateien hierher ziehen oder</p>
+                    <input type="file" id="file-input" accept="audio/mpeg" multiple style="display: none;">
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('file-input').click();">
+                        <i class="bi bi-folder2-open"></i> Dateien auswählen
+                    </button>
+                    <p class="form-text mt-2">Nur MP3-Dateien erlaubt.</p>
+                </div>
+                <div id="upload-progress" class="mt-3" style="display: none;">
+                    <h5>Upload Fortschritt:</h5>
+                    <ul id="upload-list" class="list-group"></ul>
                 </div>
             </div>
         </div>
@@ -137,52 +181,71 @@
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.14.0/Sortable.min.js"></script>
     <script>
         const socket = io();
-        let currentTag = null;
-        let currentPlaylist = null;
+        let currentTagId = null;
+        let currentPlaylistId = null;
+        let sortablePlaylist = null;
         let addTagModal = null;
         let addToPlaylistModal = null;
+        
+        // --- Upload Elements ---
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const uploadProgressDiv = document.getElementById('upload-progress');
+        const uploadList = document.getElementById('upload-list');
         
         // Modal-Instanzen initialisieren
         document.addEventListener('DOMContentLoaded', function() {
             addTagModal = new bootstrap.Modal(document.getElementById('addTagModal'));
             addToPlaylistModal = new bootstrap.Modal(document.getElementById('addToPlaylistModal'));
-        });
-        
-        // Socket.IO Events
-        socket.on('tag_detected', function(data) {
-            currentTag = data.tag_id;
-            document.getElementById('current-tag').textContent = `Tag ID: ${currentTag}`;
             loadTags();
         });
         
-        socket.on('playlist_selected', function(data) {
-            currentPlaylist = data.id;
-            document.getElementById('add-to-playlist').disabled = false;
-            displayPlaylistItems(data.items);
+        // Socket.IO Events
+        socket.on('connect', () => {
+            console.log('Connected to management socket');
+        });
+        
+        socket.on('tag_detected', function(data) {
+            const detectedTagId = data.tag_id;
+            console.log('tag_detected event received:', detectedTagId);
+            currentTagId = detectedTagId;
+            document.getElementById('current-tag').textContent = detectedTagId ? `Tag ID: ${detectedTagId}` : 'Kein Tag erkannt';
+            
+            loadTags();
+            
+            if (detectedTagId) {
+                loadPlaylistForTag(detectedTagId);
+            } else {
+                currentPlaylistId = null;
+                document.getElementById('add-to-playlist').disabled = true;
+                displayPlaylistItems([]);
+            }
         });
         
         // Tags laden
         function loadTags() {
+            console.log("Loading tags...");
             fetch('/api/tags')
                 .then(response => response.json())
                 .then(tags => {
+                    console.log("Tags received:", tags);
                     const tagList = document.getElementById('tag-list');
                     tagList.innerHTML = '';
                     
                     tags.forEach(tag => {
                         const tagElement = document.createElement('div');
-                        tagElement.className = `list-group-item list-group-item-action ${tag.tag_id === currentTag ? 'current-tag' : ''}`;
+                        tagElement.className = `list-group-item list-group-item-action ${tag.tag_id === currentTagId ? 'current-tag' : ''}`;
                         tagElement.innerHTML = `
                             <div class="d-flex justify-content-between align-items-center">
-                                <div onclick="selectTag('${tag.tag_id}')" style="cursor: pointer; flex-grow: 1;">
+                                <div onclick="selectTag('${tag.tag_id}')" style="cursor: pointer; flex-grow: 1;" title="Tag ID: ${tag.tag_id}\nPlaylist ID: ${tag.playlist_id || 'N/A'}">
                                     <strong>${tag.name || tag.tag_id}</strong>
-                                    ${tag.playlist ? `<br><small>${tag.playlist}</small>` : ''}
+                                    ${tag.playlist_name ? `<br><small>${tag.playlist_name}</small>` : ''}
                                 </div>
                                 <div>
-                                    <button class="btn btn-sm btn-outline-primary me-2" onclick="editTag('${tag.tag_id}', '${tag.name || ''}')">
+                                    <button class="btn btn-sm btn-outline-primary me-2" onclick="editTag('${tag.tag_id}', '${tag.name || ''}')" title="Tag bearbeiten">
                                         <i class="bi bi-pencil"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteTag('${tag.tag_id}')">
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteTag('${tag.tag_id}')" title="Tag löschen">
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 </div>
@@ -190,218 +253,471 @@
                         `;
                         tagList.appendChild(tagElement);
                     });
+                })
+                .catch(error => console.error("Error loading tags:", error));
+        }
+        
+        // Funktion zum Laden der Playlist für einen gegebenen Tag
+        function loadPlaylistForTag(tagId) {
+            console.log(`Loading playlist for tag: ${tagId}`);
+            fetch(`/api/tags/${tagId}/playlist`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                 })
+                .then(data => {
+                    console.log(`Playlist data received for tag ${tagId}:`, data);
+                    if (data && data.id !== null && data.id !== undefined) {
+                        currentPlaylistId = data.id;
+                        document.getElementById('add-to-playlist').disabled = false;
+                        displayPlaylistItems(data.items || []);
+                    } else {
+                        console.warn(`No valid playlist found for tag ${tagId}. Displaying empty.`);
+                        currentPlaylistId = null;
+                        document.getElementById('add-to-playlist').disabled = true;
+                        displayPlaylistItems([]);
+                    }
+                })
+                .catch(error => {
+                     console.error(`Error loading playlist for tag ${tagId}:`, error);
+                     const playlistContainer = document.getElementById('playlist-items');
+                     playlistContainer.innerHTML = '<div class="list-group-item text-danger">Fehler beim Laden der Playlist.</div>';
+                     document.getElementById('add-to-playlist').disabled = true;
+                     currentPlaylistId = null;
                 });
         }
         
         // Tag auswählen
         function selectTag(tagId) {
-            currentTag = tagId;
-            document.getElementById('current-tag').textContent = `Tag ID: ${currentTag}`;
+            console.log(`Tag selected via click: ${tagId}`);
+            currentTagId = tagId;
+            document.getElementById('current-tag').textContent = `Tag ID: ${currentTagId}`;
             
-            // Playlist für den Tag laden
-            fetch(`/api/tags/${tagId}/playlist`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.items) {
-                        currentPlaylist = data.id;
-                        document.getElementById('add-to-playlist').disabled = false;
-                        displayPlaylistItems(data.items);
-                    } else {
-                        // Neue Playlist erstellen
-                        fetch('/api/playlists', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                tag_id: tagId,
-                                name: `Playlist für ${tagId}`
-                            })
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            currentPlaylist = data.id;
-                            document.getElementById('add-to-playlist').disabled = false;
-                            displayPlaylistItems([]);
-                        });
-                    }
-                });
+            loadPlaylistForTag(tagId);
             
-            // Tags neu laden, um den ausgewählten Tag zu markieren
             loadTags();
         }
         
-        // Playlist-Items anzeigen
+        // Playlist-Items anzeigen und SortableJS initialisieren
         function displayPlaylistItems(items) {
+            console.log("Displaying playlist items:", items);
             const playlistContainer = document.getElementById('playlist-items');
-            playlistContainer.innerHTML = '';
-            
-            items.forEach(item => {
-                const itemElement = document.createElement('div');
-                itemElement.className = 'list-group-item playlist-item';
-                itemElement.setAttribute('data-id', item.id);
-                itemElement.innerHTML = `
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="title-truncate" title="${item.mp3_file}">${item.mp3_file}</span>
-                        <button class="btn btn-sm btn-outline-danger" onclick="deletePlaylistItem(${item.id})">
+
+            // 1. Destroy existing Sortable instance *before* clearing the container
+            if (sortablePlaylist) {
+                try {
+                    console.log("Destroying previous Sortable instance.");
+                    sortablePlaylist.destroy();
+                    sortablePlaylist = null; // Ensure it's reset
+                } catch (e) {
+                    console.error("Error destroying Sortable instance:", e);
+                    // Continue execution even if destroy fails?
+                }
+            }
+
+            // 2. Clear current items from the container
+            playlistContainer.innerHTML = ''; 
+
+            // 3. Populate the container with new items
+            if (!items || items.length === 0) {
+                 playlistContainer.innerHTML = '<div class="list-group-item">Playlist ist leer.</div>';
+            } else {
+                items.forEach(item => {
+                    const itemElement = document.createElement('div');
+                    itemElement.className = 'list-group-item playlist-item d-flex justify-content-between align-items-center';
+                    itemElement.setAttribute('data-id', item.id);
+                    itemElement.innerHTML = `
+                        <span class="title-truncate" title="${item.mp3_file} (ID: ${item.id}, DB Pos: ${item.position})">
+                            <span class="badge bg-secondary me-2">${item.position + 1}</span> 
+                            ${item.mp3_file}
+                        </span>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deletePlaylistItem(${item.id})" title="Aus Playlist entfernen">
                             <i class="bi bi-trash"></i>
                         </button>
-                    </div>
-                `;
-                playlistContainer.appendChild(itemElement);
-            });
+                    `;
+                    playlistContainer.appendChild(itemElement);
+                });
+            }
             
-            // Sortable für die Playlist-Items initialisieren
-            new Sortable(playlistContainer, {
-                animation: 150,
-                onEnd: function(evt) {
-                    const items = Array.from(playlistContainer.children).map((item, index) => ({
-                        id: item.getAttribute('data-id'),
-                        position: index
-                    }));
-                    
-                    // Positionen aktualisieren
-                    items.forEach(item => {
-                        fetch(`/api/playlist-items/${item.id}`, {
-                            method: 'PUT',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                position: item.position
-                            })
-                        });
+            // 4. Initialize SortableJS again if items exist
+            // (Ensure the previous instance is destroyed before creating a new one)
+            if (items && items.length > 0) { 
+                 try {
+                     console.log("Initializing new Sortable instance.");
+                     sortablePlaylist = new Sortable(playlistContainer, {
+                        animation: 150,
+                        ghostClass: 'bg-light',
+                        onEnd: function (evt) {
+                            console.log("Sortable onEnd event:", evt);
+                            const itemId = evt.item.getAttribute('data-id');
+                            const newIndex = evt.newIndex;
+                            console.log(`Item ID: ${itemId}, Old Index: ${evt.oldIndex}, New Index: ${newIndex}`);
+                            if (itemId && newIndex !== null) {
+                                 updatePlaylistItemPosition(itemId, newIndex);
+                            }
+                        }
                     });
+                 } catch (e) {
+                      console.error("Error initializing SortableJS:", e);
+                      // Display an error? Prevent further drag/drop?
+                 }
+            }
+        }
+        
+        // Position eines Playlist-Items aktualisieren
+        function updatePlaylistItemPosition(itemId, newPosition) {
+            console.log(`Updating item ${itemId} to position ${newPosition}`);
+            // Optionally: Add a visual indicator that saving is in progress
+
+            fetch(`/api/playlist-items/${itemId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ position: newPosition })
+            })
+            .then(response => {
+                 // Check if response is ok (status in the range 200-299)
+                 if (!response.ok) {
+                     // If not ok, try to parse error json, otherwise throw generic error
+                     return response.json().catch(() => {
+                         throw new Error(`HTTP error ${response.status}`);
+                     }).then(err => { throw new Error(err.error || `HTTP error ${response.status}`) });
+                 }
+                 return response.json(); // Parse success json
+             })
+            .then(data => {
+                console.log("Update position response:", data);
+                if (data.status === 'success') {
+                    console.log("Position update reported as success by backend.");
+                    // --- Modification: Do NOT reload the whole list on success --- 
+                    // We trust the SortableJS visual update for now.
+                    // Reloading can cause the snap-back effect.
+                    // Only reload if the backend reported an error (handled in catch).
+                    
+                    // Optional: remove visual indicator for saving
+                } else {
+                    // Handle cases where backend responds with 2xx status but custom error field
+                    console.error("Failed to update position (backend reported error):", data.error);
+                    alert('Fehler beim Aktualisieren der Position: ' + data.error);
+                    // Reload playlist to revert visual change if backend failed
+                     if (currentTagId) {
+                         console.log("Reloading playlist due to backend error.");
+                         loadPlaylistForTag(currentTagId);
+                    }
                 }
-            });
+            })
+            .catch(error => {
+                 console.error("Network or parsing error updating position:", error);
+                 alert('Fehler beim Senden der Positionsänderung: ' + error.message);
+                 // Reload playlist to revert visual change on network/other errors
+                 if (currentTagId) {
+                      console.log("Reloading playlist due to network/parsing error.");
+                     loadPlaylistForTag(currentTagId);
+                 }
+             });
         }
         
         // Tag bearbeiten
-        function editTag(tagId, currentName) {
-            document.getElementById('tagId').value = tagId;
-            document.getElementById('tagName').value = currentName;
-            addTagModal.show();
+        function editTag(tagId, tagName) {
+             console.log(`Editing tag: ${tagId}, Name: ${tagName}`);
+             document.getElementById('addTagForm').reset();
+             document.getElementById('tagId').value = tagId;
+             document.getElementById('tagId').readOnly = true;
+             document.getElementById('tagName').value = tagName;
+             document.querySelector('#addTagModal .modal-title').textContent = 'Tag bearbeiten';
+             addTagModal.show();
         }
+        
+        // Event listener for opening the Add Tag modal via button
+        document.querySelector('[data-bs-target="#addTagModal"]').addEventListener('click', () => {
+             console.log("Opening Add New Tag modal");
+             document.getElementById('addTagForm').reset();
+             document.getElementById('tagId').readOnly = false;
+             document.querySelector('#addTagModal .modal-title').textContent = 'Neuen Tag hinzufügen';
+         });
         
         // Tag hinzufügen/bearbeiten
         document.getElementById('saveTag').addEventListener('click', function() {
-            const tagId = document.getElementById('tagId').value;
-            const tagName = document.getElementById('tagName').value;
+            const tagId = document.getElementById('tagId').value.trim();
+            const tagName = document.getElementById('tagName').value.trim();
+            if (!tagId) {
+                alert('Tag ID ist erforderlich.');
+                return;
+            }
+            console.log(`Saving tag - ID: ${tagId}, Name: ${tagName}`);
             
             fetch('/api/tags', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    tag_id: tagId,
-                    name: tagName
-                })
+                body: JSON.stringify({ tag_id: tagId, name: tagName })
             })
-            .then(response => response.json())
+            .then(response => {
+                 if (!response.ok) {
+                      return response.json().then(err => { throw new Error(err.error || `HTTP error ${response.status}`) });
+                 }
+                 return response.json();
+            })
             .then(data => {
-                loadTags();
+                console.log("Save tag response:", data);
                 addTagModal.hide();
-                document.getElementById('tagId').value = '';
-                document.getElementById('tagName').value = '';
-            });
+                loadTags();
+                if (tagId === currentTagId) {
+                     loadPlaylistForTag(tagId);
+                }
+            })
+            .catch(error => {
+                 console.error("Error saving tag:", error);
+                 alert('Fehler beim Speichern des Tags: ' + error.message);
+             });
         });
         
         // Tag löschen
         function deleteTag(tagId) {
-            if (confirm('Möchten Sie diesen Tag wirklich löschen?')) {
+            if (confirm(`Soll der Tag ${tagId} wirklich gelöscht werden? Die zugehörige Playlist wird ebenfalls entfernt!`)) {
+                 console.log(`Deleting tag: ${tagId}`);
                 fetch(`/api/tags/${tagId}`, {
                     method: 'DELETE'
                 })
-                .then(response => {
-                    if (response.ok) {
+                .then(response => response.json())
+                .then(data => {
+                    console.log("Delete tag response:", data);
+                    if (data.status === 'success') {
                         loadTags();
+                        if (tagId === currentTagId) {
+                            currentTagId = null;
+                            currentPlaylistId = null;
+                            document.getElementById('current-tag').textContent = 'Kein Tag erkannt';
+                            document.getElementById('add-to-playlist').disabled = true;
+                            displayPlaylistItems([]);
+                        }
+                    } else {
+                        alert('Fehler beim Löschen des Tags: ' + data.error);
                     }
-                });
+                })
+                 .catch(error => {
+                     console.error("Error deleting tag:", error);
+                     alert('Netzwerkfehler beim Löschen des Tags.');
+                 });
             }
         }
         
         // Playlist-Item hinzufügen
         document.getElementById('add-to-playlist').addEventListener('click', function() {
-            if (!currentTag) {
-                alert('Bitte wählen Sie zuerst einen Tag aus');
+            if (!currentPlaylistId) {
+                alert('Bitte zuerst einen Tag mit einer Playlist auswählen.');
                 return;
             }
-            
-            addToPlaylistModal.show();
+            fetch('/api/mp3-files')
+                .then(response => response.json())
+                .then(files => {
+                    const selectElement = document.getElementById('mp3Files');
+                    selectElement.innerHTML = '';
+                    files.forEach(file => {
+                        const option = document.createElement('option');
+                        option.value = file;
+                        option.textContent = file;
+                        selectElement.appendChild(option);
+                    });
+                    addToPlaylistModal.show();
+                })
+                .catch(error => {
+                    console.error("Error fetching MP3 files:", error);
+                    alert('Fehler beim Laden der MP3-Liste.');
+                });
         });
         
         // Event-Listener für den Speichern-Button im MP3-Modal
         document.getElementById('saveToPlaylist').addEventListener('click', function() {
-            if (!currentPlaylist) {
-                alert('Bitte wählen Sie zuerst einen Tag aus');
-                return;
-            }
-            
-            addMp3sToPlaylist(currentPlaylist);
-            addToPlaylistModal.hide();
-        });
-        
-        function addMp3sToPlaylist(playlistId) {
             const selectedFiles = Array.from(document.getElementById('mp3Files').selectedOptions).map(option => option.value);
             if (selectedFiles.length === 0) {
-                alert('Bitte wählen Sie mindestens eine MP3-Datei aus');
+                alert('Bitte mindestens eine MP3-Datei auswählen.');
                 return;
             }
-
-            fetch(`/api/playlists/${playlistId}/items/batch`, {
+            if (!currentPlaylistId) {
+                alert('Interner Fehler: Keine Playlist ID ausgewählt.');
+                return;
+            }
+            console.log(`Adding files to playlist ${currentPlaylistId}:`, selectedFiles);
+            
+            fetch(`/api/playlists/${currentPlaylistId}/items/batch`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    mp3_files: selectedFiles
-                })
+                body: JSON.stringify({ mp3_files: selectedFiles })
             })
-            .then(response => response.json())
+            .then(response => {
+                 if (!response.ok) {
+                     return response.json().then(err => { throw new Error(err.error || `HTTP error ${response.status}`) });
+                 }
+                 return response.json();
+             })
             .then(data => {
-                if (data.error) {
-                    alert('Fehler beim Hinzufügen der MP3s: ' + data.error);
-                    return;
+                console.log("Add items response:", data);
+                addToPlaylistModal.hide();
+                if (currentTagId) {
+                    loadPlaylistForTag(currentTagId);
                 }
-                // Hole die aktualisierten Playlist-Items
-                fetch(`/api/tags/${currentTag}/playlist`)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.items) {
-                            displayPlaylistItems(data.items);
-                        }
-                    });
-                document.getElementById('mp3Files').selectedIndex = -1;
             })
             .catch(error => {
-                console.error('Error:', error);
-                alert('Fehler beim Hinzufügen der MP3s');
-            });
-        }
+                 console.error("Error adding items to playlist:", error);
+                 alert('Fehler beim Hinzufügen der MP3s: ' + error.message);
+             });
+        });
         
         // Playlist-Item löschen
         function deletePlaylistItem(itemId) {
-            if (confirm('Möchten Sie dieses Item wirklich aus der Playlist entfernen?')) {
-                fetch(`/api/playlist-items/${itemId}`, {
+             if (!itemId) return;
+             console.log(`Deleting playlist item: ${itemId}`);
+             if (confirm('Soll dieser Titel wirklich aus der Playlist entfernt werden?')) {
+                 fetch(`/api/playlist-items/${itemId}`, {
                     method: 'DELETE'
                 })
                 .then(response => {
-                    if (response.ok) {
-                        // Hole die aktualisierten Playlist-Items
-                        fetch(`/api/tags/${currentTag}/playlist`)
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.items) {
-                                    displayPlaylistItems(data.items);
-                                }
-                            });
+                     if (!response.ok) {
+                         return response.json().then(err => { throw new Error(err.error || `HTTP error ${response.status}`) });
+                     }
+                     return response.json();
+                 })
+                .then(data => {
+                    console.log("Delete item response:", data);
+                    if (data.status === 'success') {
+                        if (currentTagId) {
+                            loadPlaylistForTag(currentTagId);
+                        }
+                    } else {
+                        alert('Fehler beim Löschen des Items: ' + data.error);
                     }
-                });
+                })
+                 .catch(error => {
+                     console.error("Error deleting playlist item:", error);
+                     alert('Fehler beim Löschen des Items: ' + error.message);
+                 });
             }
         }
+
+        // --- File Upload Logic ---
+
+        // Prevent default drag behaviors
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false); // Prevent browser opening file
+        });
+
+        // Highlight drop zone when item is dragged over it
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, unhighlight, false);
+        });
+
+        // Handle dropped files
+        dropZone.addEventListener('drop', handleDrop, false);
+
+        // Handle file selection via button
+        fileInput.addEventListener('change', function(e) {
+            handleFiles(this.files);
+        });
+
+        function preventDefaults (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        function highlight(e) {
+            dropZone.classList.add('bg-light', 'border-primary');
+        }
+
+        function unhighlight(e) {
+            dropZone.classList.remove('bg-light', 'border-primary');
+        }
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        }
+
+        function handleFiles(files) {
+            const validFiles = [...files].filter(file => file.type === 'audio/mpeg');
+            const invalidFiles = [...files].filter(file => file.type !== 'audio/mpeg');
+
+            if (invalidFiles.length > 0) {
+                const invalidNames = invalidFiles.map(f => f.name).join(', ');
+                alert(`Folgende Dateien sind keine MP3s und werden ignoriert: ${invalidNames}`);
+            }
+            
+            if (validFiles.length === 0) {
+                console.log("No valid MP3 files selected.");
+                return;
+            }
+
+            uploadProgressDiv.style.display = 'block';
+            uploadList.innerHTML = ''; // Clear previous uploads
+
+            validFiles.forEach(file => {
+                uploadFile(file);
+            });
+        }
+
+        function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const listItem = document.createElement('li');
+            listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+            listItem.textContent = `${file.name} (Wird hochgeladen...)`;
+            const statusSpan = document.createElement('span');
+            statusSpan.className = 'badge bg-secondary rounded-pill';
+            statusSpan.textContent = '0%';
+            listItem.appendChild(statusSpan);
+            uploadList.appendChild(listItem);
+
+            fetch('/api/upload-mp3', {
+                method: 'POST',
+                body: formData
+                // No 'Content-Type' header, browser sets it correctly for FormData
+            })
+            .then(response => {
+                // Check if response is ok (status in the range 200-299)
+                if (!response.ok) {
+                    // Try to parse error json, otherwise throw generic error
+                    return response.json().catch(() => {
+                        throw new Error(`HTTP error ${response.status}`);
+                    }).then(err => { throw new Error(err.error || `HTTP error ${response.status}`) });
+                }
+                return response.json(); // Parse success json
+            })
+            .then(data => {
+                console.log('Upload success:', data);
+                listItem.textContent = `${file.name}`; // Remove "(Wird hochgeladen...)"
+                statusSpan.className = 'badge bg-success rounded-pill';
+                statusSpan.innerHTML = '<i class="bi bi-check-circle-fill"></i> Fertig';
+                listItem.appendChild(statusSpan); // Re-append updated span
+                // Optionally refresh the MP3 list in the "Add to Playlist" modal if it's open or next time it opens
+                // fetchMp3ListForModal(); // Might need to implement this
+            })
+            .catch(error => {
+                console.error('Upload error:', error);
+                listItem.textContent = `${file.name}`; // Remove "(Wird hochgeladen...)"
+                statusSpan.className = 'badge bg-danger rounded-pill';
+                statusSpan.innerHTML = '<i class="bi bi-x-octagon-fill"></i> Fehler';
+                listItem.appendChild(statusSpan); // Re-append updated span
+                listItem.title = error.message; // Show error on hover
+            });
+            // Note: Real progress requires XMLHttpRequest which is more complex.
+            // This just shows "uploading" then success/error.
+             statusSpan.textContent = '...'; // Simple intermediate state
+        }
         
-        // Initial laden
+        // Initialisierung beim Laden der Seite
         loadTags();
     </script>
 </body>
