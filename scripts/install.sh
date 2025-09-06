@@ -35,6 +35,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Remove trailing slash from INSTALL_DIR if it exists
+INSTALL_DIR=${INSTALL_DIR%/}
+
 # Stop and disable the old player service if it exists
 echo "Stopping and disabling old bertibox-player service (if exists)..."
 systemctl stop bertibox-player.service > /dev/null 2>&1
@@ -51,11 +54,12 @@ After=network.target
 Type=simple
 User=$USER
 WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/venv/bin/python3 $INSTALL_DIR/web_interface.py
+ExecStart=$INSTALL_DIR/venv/bin/python3 $INSTALL_DIR/run.py
 Restart=always
 RestartSec=10
 StandardOutput=append:/home/$USER/bertibox-web.log
 StandardError=append:/home/$USER/bertibox-web.log
+Environment="PYTHONUNBUFFERED=1"
 
 [Install]
 WantedBy=multi-user.target

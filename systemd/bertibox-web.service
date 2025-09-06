@@ -1,16 +1,17 @@
 [Unit]
-Description=BertiBox Web Interface Service
+Description=BertiBox Web Interface and Player Service
 After=network.target
 
 [Service]
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/git/BertiBox
-ExecStart=/home/pi/git/BertiBox/venv/bin/python3 /home/pi/git/BertiBox/web_interface.py
+ExecStart=/home/pi/git/BertiBox/venv/bin/python3 /home/pi/git/BertiBox/run.py
 Restart=always
 RestartSec=10
 StandardOutput=append:/home/pi/bertibox-web.log
 StandardError=append:/home/pi/bertibox-web.log
+Environment="PYTHONUNBUFFERED=1"
 
 [Install]
 WantedBy=multi-user.target 
