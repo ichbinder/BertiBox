@@ -1,13 +1,17 @@
-# Berti Box
+# BertiBox
 
-A Raspberry Pi 4 based RFID music player that plays MP3s when specific RFID tags are placed on the reader. The system includes a web interface for managing RFID tag and MP3 associations.
+A Raspberry Pi 4-based RFID music player that plays MP3s when RFID tags are placed on the reader. The system includes a modern web interface for managing RFID tag and playlist associations.
 
 ## Features
 
-- RFID tag detection using RC522 module
-- MP3 playback through Raspberry Pi audio output
-- Web interface for managing RFID-MP3 associations
-- SQLite database for storing RFID-MP3 mappings
+- **RFID tag detection** using RC522 module
+- **MP3 playback** through Raspberry Pi audio output
+- **Modern web interface** with real-time updates via WebSocket
+- **Playlist management** - Multiple MP3s per RFID tag with drag & drop sorting
+- **Media explorer** - Browse, upload, and manage MP3 files
+- **Player controls** - Play, pause, volume control, sleep timer
+- **SQLite database** for persistent data storage
+- **Systemd service** for automatic startup on boot
 
 ## Hardware Requirements
 
@@ -18,9 +22,9 @@ A Raspberry Pi 4 based RFID music player that plays MP3s when specific RFID tags
 
 ## Software Requirements
 
-- Python 3.x
+- Python 3.9+
 - Virtual environment
-- Flask
+- Flask with SocketIO
 - RPi.GPIO
 - mfrc522
 - pygame
@@ -28,73 +32,207 @@ A Raspberry Pi 4 based RFID music player that plays MP3s when specific RFID tags
 
 ## Installation
 
-1. Clone this repository:
+### Quick Installation with Script
+
+```bash
+# Clone repository
+git clone [repository-url]
+cd BertiBox
+
+# Install as systemd service
+sudo ./scripts/install.sh -d /home/pi/git/BertiBox -u pi
+```
+
+### Manual Installation
+
+1. **Clone repository:**
 ```bash
 git clone [repository-url]
 cd BertiBox
 ```
 
-2. Create and activate a virtual environment:
+2. **Create and activate virtual environment:**
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 ```
 
-3. Install required Python packages:
+3. **Install BertiBox package:**
 ```bash
-pip install -r requirements.txt
+# Standard installation
+pip install .
+
+# Or for development with editable install:
+pip install -e .
+
+# For development with testing tools:
+pip install -e ".[dev]"
 ```
 
-4. Install system dependencies:
+4. **Install system dependencies:**
 ```bash
 sudo apt-get install libsdl2-dev libsdl2-ttf-dev libsdl2-image-dev libsdl2-mixer-dev
 ```
 
-5. Create the mp3 directory:
+5. **Create MP3 directory:**
 ```bash
-mkdir mp3
+mkdir -p mp3
 ```
 
-6. Set up the database:
+6. **Initialize database:**
 ```bash
-python init_db.py
+python -c "from src.database import init_db; init_db()"
 ```
 
 ## Usage
 
-1. Activate the virtual environment:
+### As Standalone Application
+
 ```bash
+# Activate virtual environment
 source venv/bin/activate
+
+# Start application
+python run.py
+# Or
+python -m src
+# Or if installed via pip
+bertibox
 ```
 
-2. Start the application:
+### As Systemd Service
+
 ```bash
-python main.py
+# Check service status
+systemctl status bertibox-web.service
+
+# View logs
+journalctl -u bertibox-web.service -f
+# Or
+tail -f /home/pi/bertibox-web.log
+
+# Restart service
+sudo systemctl restart bertibox-web.service
 ```
 
-3. In a separate terminal, start the web interface:
-```bash
-source venv/bin/activate
-python web_interface.py
-```
+### Web Interface
 
-4. Access the web interface at `http://[raspberry-pi-ip]:5000`
+After starting, the web interface is available at:
+- `http://[raspberry-pi-ip]:5000`
 
-5. Place an RFID tag on the reader to play associated MP3s
+## Web Interface Features
 
-## Web Interface
+### Main Page (`/`)
+- Real-time current RFID tag display
+- Tag management with playlist assignment
+- Drag & drop for playlist ordering
+- Quick MP3 selection from media explorer
 
-The web interface allows you to:
-- View current RFID tag on reader
-- Associate MP3 files with RFID tags
-- Manage existing associations
+### Player (`/player`)
+- Play/Pause controls
+- Volume control (persisted in database)
+- Sleep timer function
+- Current playback status
+
+### Media Explorer (`/explorer`)
+- File browser for MP3 directory
+- MP3 upload with progress indicator
+- File rename and delete
+- Directory navigation
 
 ## Project Structure
 
-- `main.py`: Main application file
-- `rfid_reader.py`: RFID reader module
-- `web_interface.py`: Web interface module
-- `database.py`: Database management
-- `mp3/`: Directory for MP3 files
-- `static/`: Web interface static files
-- `templates/`: Web interface templates 
+```
+BertiBox/
+├── src/                     # Source code
+│   ├── __main__.py         # Entry point
+│   ├── app.py              # Flask application
+│   ├── config.py           # Configuration
+│   ├── rfid_reader.py      # RFID hardware interface
+│   ├── core/               # Core functionality
+│   │   └── player.py       # BertiBox player class
+│   ├── api/                # REST API endpoints
+│   │   ├── tags.py         # Tag management
+│   │   ├── playlists.py    # Playlist management
+│   │   ├── media.py        # Media explorer
+│   │   ├── player.py       # Player controls
+│   │   └── upload.py       # File upload
+│   ├── websocket/          # WebSocket handlers
+│   │   └── handlers.py     # Socket.IO events
+│   ├── database/           # Database layer
+│   │   ├── models.py       # SQLAlchemy models
+│   │   └── manager.py      # Database operations
+│   └── utils/              # Utility functions
+├── tests/                   # Test suite
+├── templates/               # HTML templates
+├── static/                  # CSS, JavaScript
+├── mp3/                     # MP3 file storage
+├── scripts/                 # Installation scripts
+├── systemd/                 # Service configuration
+├── run.py                   # Quick start script
+├── setup.py                 # Package installation
+├── pyproject.toml          # Modern Python packaging
+├── Makefile                # Build automation
+└── CLAUDE.md               # Developer documentation
+```
+
+## API Endpoints
+
+- `GET /api/current-tag` - Current RFID tag status
+- `GET/POST /api/tags` - Tag management
+- `GET/POST /api/playlist/<id>/items` - Manage playlist items
+- `GET /api/explorer` - File browser
+- `POST /api/player/play|pause|volume|sleep` - Player controls
+- `POST /api/upload` - MP3 upload
+
+## Development
+
+### Running Tests
+
+```bash
+# All tests
+make test
+
+# With coverage
+make test-coverage
+
+# Unit tests only
+pytest tests/unit/
+
+# Integration tests only
+pytest tests/integration/
+```
+
+### Code Quality
+
+```bash
+# Linting
+make lint
+
+# Type checking
+make typecheck
+
+# Check everything
+make check
+```
+
+## Troubleshooting
+
+### RFID Reader Not Detected
+- Enable SPI in `raspi-config`
+- Check wiring (see hardware documentation)
+- Check service logs: `journalctl -u bertibox-web -f`
+
+### No Audio Output
+- Configure audio output: `sudo raspi-config` > Advanced Options > Audio
+- Check volume: `alsamixer`
+- Test sound: `speaker-test -t wav -c 2`
+
+### Web Interface Not Accessible
+- Check firewall settings
+- Verify service is running: `systemctl status bertibox-web`
+- Check port 5000 is free: `sudo netstat -tlnp | grep 5000`
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
