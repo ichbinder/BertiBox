@@ -1,0 +1,57 @@
+[run]
+# Coverage.py configuration
+
+# Source directories to measure
+source = .
+
+# Omit files and directories from coverage
+omit =
+    */tests/*
+    */test_*.py
+    */__pycache__/*
+    */venv/*
+    */.git/*
+    */site-packages/*
+    setup.py
+    */migrations/*
+    */config.py
+    */conftest.py
+
+[report]
+# Reporting options
+precision = 2
+show_missing = True
+skip_covered = False
+skip_empty = True
+
+# Exclude specific lines from coverage
+exclude_lines =
+    # Standard pragma
+    pragma: no cover
+    
+    # Debug code
+    def __repr__
+    def __str__
+    
+    # Defensive programming
+    raise AssertionError
+    raise NotImplementedError
+    
+    # Non-runnable code
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstract
+    @abstractmethod
+    
+    # Error handlers
+    except ImportError
+    except Exception as e:
+    
+[html]
+# HTML report settings
+directory = htmlcov
+title = BertiBox Test Coverage Report
+
+[xml]
+# XML report for CI/CD integration
+output = coverage.xml
