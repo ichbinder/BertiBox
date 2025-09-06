@@ -31,6 +31,9 @@ env/
 *.swp
 *.swo
 
+# Claude AI
+CLAUDE.md
+
 # Project specific
 *.db
 *.mp3
