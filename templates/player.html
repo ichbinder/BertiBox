@@ -10,20 +10,16 @@
     <style>
         body {
             font-family: sans-serif;
-            background-color: #f4f4f4;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            background-color: #f4f4f4; /* Keep background color */
+            margin: 0; /* Keep margin 0 */
         }
         .player-container {
             background-color: #fff;
             padding: 30px;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            width: 90%;
             max-width: 600px;
+            margin: 0 auto; /* Center the container within the outer Bootstrap container */
             text-align: center;
         }
         h1, h2 {
@@ -102,7 +98,6 @@
              color: #004085;
          }
          .nav-link {
-            margin-top: 20px;
             display: inline-block;
             color: #007bff;
             text-decoration: none;
@@ -134,48 +129,79 @@
             font-style: italic;
             color: #666;
          }
+         /* Remove underline from navbar links on hover */
+         .navbar .nav-link:hover {
+              text-decoration: none;
+          }
+         /* Consistent Checkbox Size */
+         .item-select-checkbox {
+               width: 1.3em;
+         }
     </style>
 </head>
 <body>
-    <div class="player-container">
-        <h1>BertiBox Player</h1>
-
-        <div id="status" class="no-tag">
-            <div id="current-tag">Kein Tag erkannt</div>
-            <div id="playlist-name">Keine Playlist geladen</div>
-            <div id="current-track">--</div>
-        </div>
-
-        <div class="controls">
-            <button id="prev-btn" disabled>⏮️</button>
-            <button id="play-pause-btn" disabled>▶️</button>
-            <button id="next-btn" disabled>⏭️</button>
-        </div>
-
-        <!-- Volume Control -->
-        <div class="volume-control">
-            <label for="volume-slider">🔊</label>
-            <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1.0">
-        </div>
-
-        <!-- Sleep Timer Controls -->
-        <div class="sleep-timer-controls">
-            <button class="btn btn-outline-secondary btn-sm" id="sleep-timer-btn" data-bs-toggle="modal" data-bs-target="#sleepTimerModal">
-                <i class="bi bi-clock"></i> Schlaf Timer
+    <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 pt-2 pb-2">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">BertiBox</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
             </button>
-            <span id="sleep-timer-status"></span>
-            <button class="btn btn-outline-danger btn-sm ms-2" id="cancel-sleep-timer-btn" style="display: none;">
-                 <i class="bi bi-x-lg"></i> Timer abbrechen
-            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Verwaltung</a>
+                    </li>
+                    <li class="nav-item">
+                         <a class="nav-link" href="/explorer">Explorer</a>
+                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" aria-current="page" href="/player">Player</a>
+                    </li>
+                </ul>
+            </div>
         </div>
+    </nav>
 
-        <div id="playlist-view">
-            <h2>Playlist</h2>
-            <ul id="playlist-items">
-                <li>Keine Playlist geladen.</li>
-            </ul>
+    <div class="container mt-4">
+        <div class="player-container">
+            <h1>BertiBox Player</h1>
+
+            <div id="status" class="no-tag">
+                <div id="current-tag">Kein Tag erkannt</div>
+                <div id="playlist-name">Keine Playlist geladen</div>
+                <div id="current-track">--</div>
+            </div>
+
+            <div class="controls">
+                <button id="prev-btn" disabled>⏮️</button>
+                <button id="play-pause-btn" disabled>▶️</button>
+                <button id="next-btn" disabled>⏭️</button>
+            </div>
+
+            <!-- Volume Control -->
+            <div class="volume-control">
+                <label for="volume-slider">🔊</label>
+                <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1.0">
+            </div>
+
+            <!-- Sleep Timer Controls -->
+            <div class="sleep-timer-controls">
+                <button class="btn btn-outline-secondary btn-sm" id="sleep-timer-btn" data-bs-toggle="modal" data-bs-target="#sleepTimerModal">
+                    <i class="bi bi-clock"></i> Schlaf Timer
+                </button>
+                <span id="sleep-timer-status"></span>
+                <button class="btn btn-outline-danger btn-sm ms-2" id="cancel-sleep-timer-btn" style="display: none;">
+                     <i class="bi bi-x-lg"></i> Timer abbrechen
+                </button>
+            </div>
+
+            <div id="playlist-view">
+                <h2>Playlist</h2>
+                <ul id="playlist-items">
+                    <li>Keine Playlist geladen.</li>
+                </ul>
+            </div>
         </div>
-         <a href="/" class="nav-link">Zur Verwaltung</a>
     </div>
 
     <!-- Sleep Timer Modal -->

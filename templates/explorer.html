@@ -1,0 +1,1636 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BertiBox - Medien Explorer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        /* Add custom styles later if needed */
+        .list-group-item {
+            cursor: pointer;
+        }
+        .list-group-item:hover {
+            background-color: #f8f9fa;
+        }
+        /* Style adjustments for mobile list view */
+        @media (max-width: 767.98px) { /* Apply on smaller screens (Bootstrap md breakpoint) */
+             .list-group-item {
+                 flex-wrap: wrap; /* Allow wrapping */
+                 padding-bottom: 0.5rem; /* Add some space below main content */
+             }
+             .list-item-main {
+                 /* Ensure main content takes full width initially */
+                 flex-basis: 100%; 
+                 margin-bottom: 0.5rem; /* Space between name and buttons */
+                 margin-right: 0 !important; /* Remove right margin */
+             }
+             .list-item-actions {
+                 /* Take full width and potentially align buttons */
+                 flex-basis: 100%;
+                 text-align: right; /* Align buttons to the right */
+                 padding-top: 0.25rem; /* Small space above buttons */
+                 padding-bottom: 0.25rem; 
+            }
+            .list-item-actions .btn {
+                 margin-left: 0.25rem; /* Adjust button spacing */
+                 margin-right: 0;
+             }
+             .list-item-name {
+                  /* Optional: Allow slightly more space for name before truncating */
+                 /* max-width: calc(100% - 50px); */ 
+             }
+             /* Stack Action Bar Buttons */
+             #selection-action-bar {
+                 flex-direction: column;
+                 align-items: stretch !important; /* Override justify-content-between */
+             }
+             #selection-action-bar > span {
+                 margin-bottom: 0.5rem; /* Space below count text */
+                 text-align: center;
+             }
+              #selection-action-bar > div { /* Button container */
+                  display: flex;
+                  flex-direction: column;
+                  align-items: stretch;
+                  width: 100%;
+              }
+             #selection-action-bar .btn {
+                  margin-bottom: 0.5rem; /* Space between stacked buttons */
+                  margin-right: 0 !important; 
+                  margin-left: 0 !important;
+              }
+             #selection-action-bar .btn:last-child {
+                  margin-bottom: 0; /* No margin below last button */
+              }
+             /* Stack Card Header Elements */
+             .card-header > .d-flex {
+                 flex-direction: column;
+                 align-items: stretch !important; /* Full width for children */
+             }
+              .card-header #filter-input {
+                  margin-right: 0 !important; /* Remove right margin */
+                  margin-bottom: 0.5rem; /* Space below filter input */
+              }
+             .card-header #btn-new-folder {
+                  /* Button takes full width */
+              }
+             /* Consistent Checkbox Size */
+             .item-select-checkbox {
+                 width: 1.3em;
+                 height: 1.3em;
+                 flex-shrink: 0; /* Prevent shrinking */
+                 cursor: pointer; /* Indicate it's clickable */
+             }
+        }
+        /* Hide list marker specifically for the 'None Found' item */
+        #playlistInfoNoneFound {
+            list-style-type: none;
+            /* Optional: Adjust padding if needed after removing marker */
+            /* padding-left: 0.5rem; */ 
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">BertiBox</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Verwaltung</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" aria-current="page" href="/explorer">Explorer</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/player">Player</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <h1>Medien Explorer</h1>
+        
+        <!-- Breadcrumbs (aktueller Pfad) -->
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb" id="breadcrumb-list">
+                <!-- Breadcrumbs werden hier dynamisch eingefügt -->
+                <li class="breadcrumb-item active" aria-current="page">/</li>
+            </ol>
+        </nav>
+
+        <!-- Selection Action Bar (hidden by default) -->
+        <div id="selection-action-bar" class="alert alert-info d-flex justify-content-between align-items-center mb-3" style="display: none;">
+            <span><strong id="selected-count">0</strong> Element(e) ausgewählt</span>
+            <div>
+                <!-- Add other batch actions later (e.g., Move) -->
+                <button class="btn btn-success btn-sm me-2" id="btn-assign-selected-tag">
+                     <i class="bi bi-tag-fill"></i> Ausgewählten Tag zuweisen
+                 </button>
+                <button class="btn btn-primary btn-sm me-2" id="btn-move-selected">
+                    <i class="bi bi-folder-symlink-fill"></i> Ausgewählte verschieben
+                </button>
+                <button class="btn btn-danger btn-sm" id="btn-delete-selected">
+                    <i class="bi bi-trash-fill"></i> Ausgewählte löschen
+                </button>
+            </div>
+        </div>
+
+        <!-- File and Folder List -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Inhalt</span>
+                <div class="d-flex align-items-center">
+                     <!-- Filter Input -->
+                     <input type="search" id="filter-input" class="form-control form-control-sm me-2" placeholder="Filtern...">
+                    <!-- Action Buttons -->
+                    <button class="btn btn-primary btn-sm" id="btn-new-folder" disabled> <!-- Disable initially -->
+                        <i class="bi bi-folder-plus"></i> Neuer Ordner
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                 <div id="loading-indicator" class="text-center" style="display: none;">
+                     <div class="spinner-border text-primary" role="status">
+                         <span class="visually-hidden">Loading...</span>
+                     </div>
+                 </div>
+                <div id="error-message" class="alert alert-danger" style="display: none;"></div>
+                <div class="list-group" id="file-list">
+                    <!-- File and folder list items will be injected here by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for New Folder -->
+    <div class="modal fade" id="newFolderModal" tabindex="-1" aria-labelledby="newFolderModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="newFolderModalLabel">Neuen Ordner erstellen</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="newFolderForm">
+                        <div class="mb-3">
+                            <label for="newFolderName" class="form-label">Ordnername</label>
+                            <input type="text" class="form-control" id="newFolderName" required pattern="^[a-zA-Z0-9_\-]+$">
+                            <div class="form-text">Nur Buchstaben, Zahlen, Unterstriche und Bindestriche erlaubt.</div>
+                        </div>
+                        <!-- Hidden input to store current path -->
+                        <input type="hidden" id="currentFolderPath">
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="button" class="btn btn-primary" id="saveNewFolderBtn">Erstellen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Rename Item -->
+    <div class="modal fade" id="renameModal" tabindex="-1" aria-labelledby="renameModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="renameModalLabel">Umbenennen</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="renameForm">
+                         <p>Aktueller Name: <strong id="currentItemName"></strong></p>
+                        <div class="mb-3">
+                            <label for="newItemName" class="form-label">Neuer Name</label>
+                            <!-- Allow more characters, including spaces, but backend validates dangerous ones -->
+                            <input type="text" class="form-control" id="newItemName" required>
+                             <div class="form-text" id="renameValidationText">Geben Sie den neuen Namen ein.</div>
+                        </div>
+                        <!-- Hidden inputs -->
+                        <input type="hidden" id="currentItemPath">
+                        <input type="hidden" id="currentItemType">
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="button" class="btn btn-primary" id="saveRenameBtn">Umbenennen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Move Item -->
+    <div class="modal fade" id="moveModal" tabindex="-1" aria-labelledby="moveModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="moveModalLabel">Verschieben</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="moveForm">
+                         <p>Element: <strong id="moveItemName"></strong></p>
+                        <div id="move-folder-loading" class="text-center mb-3" style="display: none;">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                            <span class="ms-2">Lade Ordnerliste...</span>
+                        </div>
+                        <div class="mb-3">
+                            <label for="targetFolderPathInput" class="form-label">Zielordner-Pfad</label>
+                            <select class="form-select" id="targetFolderSelect" required disabled>
+                                <option value="" selected disabled>Lade Ordner...</option>
+                                <!-- Folder options will be populated here -->
+                            </select>
+                        </div>
+                        <!-- Hidden inputs -->
+                        <input type="hidden" id="moveItemSourcePath">
+                        <input type="hidden" id="moveItemType">
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="button" class="btn btn-primary" id="saveMoveBtn">Verschieben</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal for Assign Tag -->
+    <div class="modal fade" id="assignTagModal" tabindex="-1" aria-labelledby="assignTagModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="assignTagModalLabel">Tag zuweisen</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="assign-tag-info" class="mb-3">
+                        <!-- Info text set by jQuery -->
+                    </div>
+                     <div id="assign-tag-loading" class="text-center mb-3" style="display: none;">
+                         <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                         <span class="ms-2">Lade Tags...</span>
+                     </div>
+                    <div class="mb-3">
+                        <label for="tagSelect" class="form-label">Ziel-Tag</label>
+                        <select class="form-select" id="tagSelect" required>
+                            <!-- Options loaded by jQuery -->
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="button" class="btn btn-primary" id="saveTagButton">
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="display: none;"></span>
+                        Zuweisen
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container for Notifications -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="generalToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <strong class="me-auto" id="toastTitle">Benachrichtigung</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body" id="toastBody">
+                Toast message goes here.
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Playlist Info -->
+    <div class="modal fade" id="playlistInfoModal" tabindex="-1" aria-labelledby="playlistInfoModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="playlistInfoModalLabel">Playlists für Datei</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Datei: <strong id="playlistInfoFileName"></strong></p>
+                    <p>Enthalten in folgenden Playlists:</p>
+                    <ul class="list-group" id="playlistInfoList">
+                        <!-- Playlist items will be loaded here -->
+                        <li class="list-group-item" id="playlistInfoLoading" style="display: none;">Lade...</li>
+                        <li class="list-group-item text-muted" id="playlistInfoNoneFound" style="display: none;">In keinen Playlists gefunden</li>
+                    </ul>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Schließen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add jQuery FIRST -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Then Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Your custom script -->
+    <script>
+        // Basic JavaScript to fetch and display root directory content
+        let currentExplorerPath = ''; // Store current path globally
+        let selectedItems = new Set(); // To store paths of selected items
+        let newFolderModal = null;
+        let renameModal = null;
+        let moveModal = null; // Variable for the new move modal
+        let searchTimeout = null; // Timeout for debouncing search input
+        let assignTagModal = null; // Variable for assign tag modal
+
+        // Attach event listeners ONCE on DOM ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize modals
+            newFolderModal = new bootstrap.Modal(document.getElementById('newFolderModal'));
+            renameModal = new bootstrap.Modal(document.getElementById('renameModal'));
+            moveModal = new bootstrap.Modal(document.getElementById('moveModal'));
+            assignTagModal = new bootstrap.Modal(document.getElementById('assignTagModal')); // Make sure this instance is created
+
+            // Attach button listeners
+            document.getElementById('btn-new-folder').addEventListener('click', () => {
+                document.getElementById('newFolderForm').reset(); // Clear previous input
+                document.getElementById('currentFolderPath').value = currentExplorerPath; // Set current path in hidden input
+                newFolderModal.show();
+            });
+            document.getElementById('saveNewFolderBtn').addEventListener('click', createNewFolder);
+            document.getElementById('saveRenameBtn').addEventListener('click', saveRename);
+            document.getElementById('saveMoveBtn').addEventListener('click', saveMove);
+            document.getElementById('btn-delete-selected').addEventListener('click', deleteSelectedItems);
+            document.getElementById('btn-move-selected').addEventListener('click', openBatchMoveModal);
+            document.getElementById('btn-assign-selected-tag').addEventListener('click', openBatchAssignTagModal);
+
+            // Filter/Search input listener
+            const filterInput = document.getElementById('filter-input');
+            let debounceTimer;
+            filterInput.addEventListener('input', function(e) {
+                clearTimeout(debounceTimer);
+                const rawValue = e.target.value;
+                const searchTerm = rawValue.trim(); 
+                console.log(`Filter input event: rawValue='${rawValue}', trimmedValue='${searchTerm}'`); // Log raw and trimmed value
+                if (searchTerm.length > 0) {
+                     console.log(` -> Condition (searchTerm.length > 0) is TRUE. Setting timeout for search.`); // Log branch
+                     debounceTimer = setTimeout(() => {
+                        performSearch(searchTerm);
+                    }, 300); // Debounce time in ms
+                } else {
+                    console.log(` -> Condition (searchTerm.length > 0) is FALSE. Calling loadDirectoryContent('${currentExplorerPath}').`); // Log branch and path
+                    // If search is cleared, load the current directory view
+                    loadDirectoryContent(currentExplorerPath); // <--- Re-enable loading on filter clear
+                }
+            });
+
+            // Add listener for the assign tag buttons using event delegation
+            document.getElementById('file-list').addEventListener('click', function(event) {
+                const assignBtn = event.target.closest('.btn-assign-tag');
+                if (assignBtn) {
+                    event.stopPropagation(); // Prevent other clicks if needed
+                    const filePath = assignBtn.dataset.path;
+                    const fileName = assignBtn.dataset.name;
+                    openAssignTagModal(filePath, fileName);
+                }
+            });
+
+            // Listener for saving tag assignment
+            document.getElementById('saveTagButton').addEventListener('click', saveTagAssignment);
+
+            // Initial load
+            loadDirectoryContent('/'); // Load root directory on page load 
+        });
+
+        function loadDirectoryContent(path) {
+            console.log(`--- loadDirectoryContent START for path: ${path} ---`); // Added log
+            console.log(`Loading directory: ${path}`);
+
+            // When loading a directory, ensure search state is cleared
+            document.getElementById('filter-input').value = ''; // Clear search input
+            document.getElementById('breadcrumb-list').style.display = ''; // Show breadcrumbs
+            document.getElementById('btn-new-folder').style.display = ''; // Show New Folder button
+            document.getElementById('selection-action-bar').style.display = 'none'; // Hide action bar
+            selectedItems.clear(); // Clear selection
+
+            currentExplorerPath = path; // Update global current path
+            const fileList = document.getElementById('file-list');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const errorMessage = document.getElementById('error-message');
+            const breadcrumbList = document.getElementById('breadcrumb-list');
+            const newFolderBtn = document.getElementById('btn-new-folder');
+            
+            fileList.innerHTML = ''; // Clear previous list
+            console.log(`--- Cleared fileList.innerHTML for path: ${path} ---`); // Added log
+            errorMessage.style.display = 'none'; // Hide error
+            loadingIndicator.style.display = 'block'; // Show loading spinner
+
+            // --- Update Breadcrumbs --- 
+            updateSelectionUI(); // Update UI (e.g., hide action bar)
+
+            breadcrumbList.innerHTML = '';
+            let currentPath = '';
+
+            // 1. Add Root Breadcrumb
+            const rootLi = document.createElement('li');
+            rootLi.className = 'breadcrumb-item';
+            const rootA = document.createElement('a');
+            rootA.href = '#';
+            rootA.textContent = '/ (root)'; 
+            rootA.onclick = (e) => {
+                e.preventDefault(); 
+                loadDirectoryContent('/');
+            };
+            if (path === '/') {
+                 rootLi.classList.add('active');
+                 rootLi.setAttribute('aria-current', 'page');
+                 // Optionally remove link functionality when already at root
+                 // rootA.onclick = (e) => e.preventDefault(); 
+                 rootLi.appendChild(rootA); // Still append 'a' for consistency, but could be text.
+            } else {
+                rootLi.appendChild(rootA);
+            }
+            breadcrumbList.appendChild(rootLi);
+
+            // 2. Add intermediate and current folder segments
+            if (path !== '/') {
+                const pathSegments = path.split('/').filter(Boolean);
+                pathSegments.forEach((segment, index) => {
+                    currentPath += '/' + segment;
+                    const navigationPath = currentPath; // Path for link
+
+                    const li = document.createElement('li');
+                    li.className = 'breadcrumb-item';
+
+                    if (index === pathSegments.length - 1) { 
+                        // Last segment - active, not a link
+                        li.classList.add('active');
+                        li.setAttribute('aria-current', 'page');
+                        li.textContent = segment;
+                    } else {
+                        // Intermediate segment - link
+                        const a = document.createElement('a');
+                        a.href = '#'; 
+                        a.textContent = segment; 
+                        a.onclick = (e) => {
+                            e.preventDefault(); 
+                            loadDirectoryContent(navigationPath);
+                        }; 
+                        li.appendChild(a);
+                    }
+                    breadcrumbList.appendChild(li);
+                });
+            }
+            // --- End Breadcrumbs ---
+
+            fetch(`/api/media?path=${encodeURIComponent(path)}`)
+                .then(response => {
+                    if (!response.ok) {
+                         return response.json().then(err => { throw new Error(err.error || `HTTP error ${response.status}`) });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    loadingIndicator.style.display = 'none';
+                    // Extract items array from response
+                    const items = data.items || data;
+                    if (!items || items.length === 0) {
+                        fileList.innerHTML = '<li class="list-group-item text-muted">Verzeichnis ist leer.</li>';
+                    } else {
+                         // Sort: Folders first, then files, alphabetically
+                         items.sort((a, b) => {
+                             if (a.type !== b.type) {
+                                 return a.type === 'folder' ? -1 : 1; // Folders before files
+                             }
+                             return a.name.localeCompare(b.name); // Alphabetical sort
+                         });
+
+                        items.forEach(item => {
+                            const listItem = document.createElement('li');
+                            listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+                            
+                            let iconClass = '';
+                            let isFolder = item.type === 'folder';
+                            
+                            if (isFolder) {
+                                iconClass = 'bi-folder-fill text-primary';
+                                listItem.style.cursor = 'pointer'; // Make whole item clickable for folders
+                                // Add click handler for folder navigation
+                                listItem.onclick = () => loadDirectoryContent(item.path);
+                            } else {
+                                // Determine icon based on extension
+                                const ext = item.name.split('.').pop().toLowerCase();
+                                if (['mp3', 'wav', 'ogg'].includes(ext)) {
+                                     iconClass = 'bi-file-earmark-music-fill text-info';
+                                } else {
+                                     iconClass = 'bi-file-earmark-fill text-secondary'; // Generic file
+                                }
+                                listItem.style.cursor = 'default'; // Files are not clickable themselves
+                            }
+                            
+                            // Set innerHTML (including buttons and checkbox)
+                            // Store path in data attribute for easy access
+                            listItem.dataset.path = item.path;
+                            listItem.dataset.name = item.name;
+                            const isChecked = selectedItems.has(item.path) ? 'checked' : '';
+                            // Determine title attribute for full name tooltip
+                            const nameTitle = item.name.includes('...') ? item.name : ''; // Add title only if name is potentially truncated by backend (or always add)
+                            listItem.innerHTML = `
+                                <div class="flex-grow-1 d-flex align-items-center me-2 list-item-main" style="min-width: 0;"> <!-- Left side: Checkbox, Icon, Name/Path -->
+                                    <input type="checkbox" class="form-check-input me-2 item-select-checkbox" data-path="${item.path}" ${isChecked}>
+                                    <i class="bi ${iconClass} me-1"></i>
+                                    ${item.type === 'file' && item.is_assigned ? '<i class="bi bi-bookmark-check-fill text-success me-1" title="In einer Playlist"></i>' : ''}
+                                    <span class="list-item-name text-truncate" title="${item.name}">
+                                        ${item.name}
+                                    </span>
+                                </div>
+                                <div class="flex-shrink-0 list-item-actions"> <!-- Right side: Buttons -->
+                                    <button class="btn btn-sm btn-outline-secondary me-1 btn-rename" title="Umbenennen" data-path="${item.path}" data-name="${item.name}" data-type="${item.type}"><i class="bi bi-pencil-fill"></i></button>
+                                    <button class="btn btn-sm btn-outline-primary me-1 btn-move" title="Verschieben" data-path="${item.path}" data-name="${item.name}" data-type="${item.type}"><i class="bi bi-folder-symlink-fill"></i></button>
+                                    ${item.type === 'file' && ['.mp3', '.wav', '.ogg'].some(ext => item.name.toLowerCase().endsWith(ext)) ? 
+                                        `<button class="btn btn-sm btn-outline-success me-1 btn-assign-tag" title="Tag zuweisen" data-path="${item.path}" data-name="${item.name}"><i class="bi bi-tag-fill"></i></button>` : ''
+                                    }
+                                    <button class="btn btn-sm btn-outline-danger btn-delete" title="Löschen" data-path="${item.path}" data-name="${item.name}" data-type="${item.type}"><i class="bi bi-trash-fill"></i></button>
+                                </div>
+                            `;
+                            
+                            // Append the item to the list
+                            fileList.appendChild(listItem);
+                            
+                            // --- Add Event Listeners Directly After Creation ---
+                            const renameBtn = listItem.querySelector('.btn-rename');
+                            const deleteBtn = listItem.querySelector('.btn-delete');
+                            const moveBtn = listItem.querySelector('.btn-move'); // Get move button
+                            const assignTagBtn = listItem.querySelector('.btn-assign-tag'); // Get assign tag button
+                            const fileNameSpan = listItem.querySelector('.list-item-name'); // Get the name span
+                            
+                            if (renameBtn) {
+                                renameBtn.onclick = (event) => {
+                                    console.log('Rename button clicked!');
+                                    event.stopPropagation();
+                                    openRenameModal(item.path, item.name, item.type);
+                                };
+                            }
+
+                            if (deleteBtn) {
+                                deleteBtn.onclick = (event) => {
+                                    event.stopPropagation();
+                                    if (item.type === 'file') {
+                                        deleteFile(item.path, item.name);
+                                    } else if (item.type === 'folder') {
+                                        deleteFolder(item.path, item.name);
+                                    }
+                                };
+                            }
+
+                            if (moveBtn) { // Add click handler for move button
+                                 moveBtn.onclick = (event) => {
+                                     console.log('Move button clicked!');
+                                     event.stopPropagation();
+                                     openMoveModal(item.path, item.name, item.type);
+                                 };
+                             }
+                             
+                            if (assignTagBtn) { // Add click handler for assign tag button
+                                assignTagBtn.onclick = (event) => {
+                                    event.stopPropagation();
+                                    openAssignTagModal(item.path, item.name);
+                                };
+                            }
+
+                            // Add listener for playlist info click on file names
+                            if (!isFolder && fileNameSpan) { // Only for files
+                                fileNameSpan.style.cursor = 'pointer'; // Indicate clickable
+                                fileNameSpan.onclick = (event) => {
+                                    event.stopPropagation(); // Prevent potential parent handlers
+                                    showPlaylistInfo(item.path, item.name);
+                                };
+                            }
+                            
+                            // Prevent clicks on checkbox from triggering folder navigation
+                            const checkbox = listItem.querySelector('.item-select-checkbox');
+                            if (checkbox) {
+                                checkbox.onclick = (event) => {
+                                    event.stopPropagation(); 
+                                };
+                            }
+                            // --- End Event Listeners ---
+                            
+                        });
+                    }
+                    // Enable the New Folder button now that loading is complete
+                    newFolderBtn.disabled = false;
+
+                    // Clear filter when loading new directory
+                    // document.getElementById('filter-input').value = ''; // <--- Temporarily commented out
+                })
+                .catch(error => {
+                    loadingIndicator.style.display = 'none';
+                    errorMessage.textContent = `Fehler beim Laden des Verzeichnisses: ${error.message}`;
+                    errorMessage.style.display = 'block';
+                    console.error('Error loading directory:', error);
+                    // Also enable button even if loading failed, user might want to create folder anyway?
+                    newFolderBtn.disabled = false; 
+                });
+        }
+
+        // Listener for checkbox changes using event delegation
+        document.getElementById('file-list').addEventListener('change', function(event) {
+            if (event.target.classList.contains('item-select-checkbox')) {
+                event.stopPropagation(); // Prevent triggering folder navigation
+                const checkbox = event.target;
+                const itemPath = checkbox.dataset.path;
+                if (checkbox.checked) {
+                    selectedItems.add(itemPath);
+                } else {
+                    selectedItems.delete(itemPath);
+                }
+                console.log("Selected items:", selectedItems); // For debugging
+                updateSelectionUI();
+            }
+        });
+
+        // Function to update UI based on selection (placeholder for now)
+        function updateSelectionUI() {
+            const actionBar = document.getElementById('selection-action-bar');
+            const countDisplay = document.getElementById('selected-count');
+            const selectionCount = selectedItems.size;
+            console.log(`Selection count: ${selectionCount}`);
+            
+            if (selectionCount > 0) {
+                // Use d-flex to match the Bootstrap classes used in the div
+                actionBar.style.display = 'flex'; 
+                countDisplay.textContent = selectionCount;
+            } else {
+                // --- Explicitly set count to 0 BEFORE hiding ---
+                countDisplay.textContent = '0'; 
+                actionBar.style.display = 'none';
+            }
+        }
+
+        function createNewFolder() {
+            const folderNameInput = document.getElementById('newFolderName');
+            const parentPath = document.getElementById('currentFolderPath').value;
+            const folderName = folderNameInput.value.trim();
+
+            // Basic validation (pattern should handle allowed chars)
+            if (!folderName || !folderNameInput.checkValidity()) {
+                alert('Bitte einen gültigen Ordnernamen eingeben (nur Buchstaben, Zahlen, Unterstrich, Bindestrich).');
+                folderNameInput.focus();
+                return;
+            }
+
+            const saveBtn = document.getElementById('saveNewFolderBtn');
+            console.log(`Creating folder '${folderName}' in '${parentPath}'`);
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const errorMessage = document.getElementById('error-message');
+            errorMessage.style.display = 'none'; 
+            // Optionally show a different kind of loading indicator?
+
+            // Disable button and show spinner
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Wird erstellt...';
+
+            fetch('/api/media/folder', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ parent_path: parentPath, folder_name: folderName })
+            })
+            .then(response => {
+                 if (!response.ok) {
+                     return response.json().then(err => { throw new Error(err.error || `HTTP error ${response.status}`) });
+                 }
+                 return response.json();
+            })
+            .then(data => {
+                console.log("Create folder response:", data);
+                newFolderModal.hide();
+                loadDirectoryContent(parentPath); // Reload current directory
+            })
+            .catch(error => {
+                 console.error("Error creating folder:", error);
+                 alert(`Fehler beim Erstellen des Ordners: ${error.message}`);
+                 // Optionally display error near the modal instead of alert
+             })
+             .finally(() => {
+                 // Re-enable button and restore text
+                 saveBtn.disabled = false;
+                 saveBtn.textContent = 'Erstellen';
+             });
+        }
+
+        function deleteFile(filePath, fileName) {
+            if (!confirm(`Soll die Datei "${fileName}" wirklich gelöscht werden?`)) {
+                return;
+            }
+
+             console.log(`Deleting file: ${filePath}`);
+             const loadingIndicator = document.getElementById('loading-indicator');
+             const errorMessage = document.getElementById('error-message');
+             errorMessage.style.display = 'none'; 
+             loadingIndicator.style.display = 'block'; // Show loading indicator
+
+             fetch(`/api/media/file?path=${encodeURIComponent(filePath)}`, {
+                 method: 'DELETE'
+             })
+             .then(async response => { // Use async to await json parsing easily
+                 if (!response.ok) {
+                     let errorMsg = `HTTP error ${response.status}`;
+                     try {
+                         // Try parsing JSON to get backend error message
+                         const errData = await response.json();
+                         errorMsg = errData.error || errorMsg;
+                     } catch (parseError) {
+                         // Ignore parsing error if response wasn't JSON, use status code message
+                         console.warn("Could not parse error response as JSON.");
+                     }
+                     // Throw using the best available message
+                     throw new Error(errorMsg);
+                 }
+                 // If OK, parse the success JSON (although DELETE might not return JSON)
+                 try {
+                      return await response.json(); 
+                 } catch(e) { 
+                     return { status: 'success' }; // Assume success if response was OK but no body/invalid JSON
+                 }
+             })
+             .then(data => {
+                 console.log("Delete file response:", data);
+                 // Reload the current directory view
+                 loadDirectoryContent(currentExplorerPath);
+             })
+             .catch(error => {
+                  loadingIndicator.style.display = 'none'; // Hide indicator on error
+                  // error.message should now contain the message from the new Error() thrown above
+                  errorMessage.textContent = `Fehler beim Löschen der Datei: ${error.message}`;
+                  errorMessage.style.display = 'block';
+                  console.error("Error deleting file:", error);
+                  // Don't reload list on error
+              });
+        }
+
+        function deleteFolder(folderPath, folderName) {
+            if (!confirm(`Soll der Ordner "${folderName}" und sein gesamter Inhalt wirklich gelöscht werden?\n\nAchtung: Dies kann nicht rückgängig gemacht werden!`)) {
+                return;
+            }
+
+             console.log(`Deleting folder: ${folderPath}`);
+             const loadingIndicator = document.getElementById('loading-indicator');
+             const errorMessage = document.getElementById('error-message');
+             errorMessage.style.display = 'none'; 
+             loadingIndicator.style.display = 'block'; 
+
+             fetch(`/api/media/folder?path=${encodeURIComponent(folderPath)}`, {
+                 method: 'DELETE'
+             })
+            .then(async response => { 
+                 if (!response.ok) {
+                     let errorMsg = `HTTP error ${response.status}`;
+                     try {
+                         const errData = await response.json();
+                         errorMsg = errData.error || errorMsg;
+                     } catch (parseError) {
+                         console.warn("Could not parse error response as JSON.");
+                     }
+                     throw new Error(errorMsg);
+                 }
+                 try {
+                      return await response.json(); 
+                 } catch(e) { 
+                     return { status: 'success' }; 
+                 }
+             })
+             .then(data => {
+                 console.log("Delete folder response:", data);
+                 // Reload the parent directory view
+                 // Determine parent path (simple approach: remove last segment)
+                 const parentPath = folderPath.substring(0, folderPath.lastIndexOf('/')) || '/';
+                 loadDirectoryContent(parentPath);
+             })
+             .catch(error => {
+                  loadingIndicator.style.display = 'none'; 
+                  errorMessage.textContent = `Fehler beim Löschen des Ordners: ${error.message}`;
+                  errorMessage.style.display = 'block';
+                  console.error("Error deleting folder:", error);
+              });
+        }
+
+        function openRenameModal(itemPath, itemName, itemType) {
+             document.getElementById('renameForm').reset();
+             document.getElementById('currentItemName').textContent = itemName;
+             document.getElementById('newItemName').value = itemName;
+             document.getElementById('currentItemPath').value = itemPath;
+             document.getElementById('currentItemType').value = itemType;
+             
+             // Adjust validation message/pattern based on type if needed
+             if (itemType === 'folder') {
+                 document.getElementById('renameValidationText').textContent = 'Nur Buchstaben, Zahlen, Unterstrich, Bindestrich erlaubt.';
+                 document.getElementById('newItemName').pattern = "^[a-zA-Z0-9_\\-]+$";
+             } else {
+                 document.getElementById('renameValidationText').textContent = 'Geben Sie den neuen Dateinamen ein (inkl. Endung).';
+                 document.getElementById('newItemName').removeAttribute('pattern'); // Allow more chars for files
+             }
+             
+             renameModal.show();
+        }
+
+        function saveRename() {
+            const oldPath = document.getElementById('currentItemPath').value;
+            const itemType = document.getElementById('currentItemType').value;
+            const newNameInput = document.getElementById('newItemName');
+            const newName = newNameInput.value.trim();
+
+            // Basic validation
+            if (!newName) {
+                 alert('Bitte einen neuen Namen eingeben.');
+                 newNameInput.focus();
+                 return;
+             }
+             // More specific validation for folders
+             if (itemType === 'folder' && !newNameInput.checkValidity()) {
+                 alert('Ungültiger Ordnername. Nur Buchstaben, Zahlen, Unterstrich, Bindestrich erlaubt.');
+                 newNameInput.focus();
+                 return;
+             }
+             // Basic validation for files (prevent slashes)
+             if (itemType === 'file' && (newName.includes('/') || newName.includes('\\'))) {
+                 alert('Dateinamen dürfen keine Schrägstriche enthalten.');
+                 newNameInput.focus();
+                 return;
+             }
+
+            const saveBtn = document.getElementById('saveRenameBtn');
+            console.log(`Renaming ${itemType} from '${oldPath}' to new name '${newName}'`);
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const errorMessage = document.getElementById('error-message');
+            errorMessage.style.display = 'none'; 
+
+            // Disable button and show spinner
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Wird umbenannt...';
+
+            // --- API Call --- 
+            fetch('/api/media/rename', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    old_path: oldPath,
+                    new_name: newName,
+                    item_type: itemType
+                })
+            })
+            .then(async response => { 
+                 if (!response.ok) {
+                     let errorMsg = `HTTP error ${response.status}`;
+                     try {
+                         const errData = await response.json();
+                         errorMsg = errData.error || errorMsg;
+                     } catch (parseError) {
+                         console.warn("Could not parse error response as JSON.");
+                     }
+                     throw new Error(errorMsg);
+                 }
+                 try {
+                      return await response.json(); 
+                 } catch(e) { 
+                     return { status: 'success' }; 
+                 }
+             })
+             .then(data => {
+                 console.log("Rename response:", data);
+                 renameModal.hide();
+                 // Reload the parent directory view
+                 const parentPath = oldPath.substring(0, oldPath.lastIndexOf('/')) || '/';
+                 loadDirectoryContent(parentPath);
+             })
+             .catch(error => {
+                  console.error("Error renaming item:", error);
+                  alert(`Fehler beim Umbenennen: ${error.message}`);
+                  // Optionally display error near the modal
+             })
+             .finally(() => {
+                 // Re-enable button and restore text
+                 saveBtn.disabled = false;
+                 saveBtn.textContent = 'Umbenennen';
+             });
+        }
+
+        function openMoveModal(sourcePath, itemName, itemType) {
+            const targetFolderSelect = document.getElementById('targetFolderSelect');
+            const saveMoveBtn = document.getElementById('saveMoveBtn');
+            const loadingIndicator = document.getElementById('move-folder-loading');
+
+            document.getElementById('moveForm').reset();
+            document.getElementById('moveItemName').textContent = itemName;
+            document.getElementById('moveItemSourcePath').value = sourcePath;
+            document.getElementById('moveItemType').value = itemType;
+            
+            // Clear existing options and disable select/button
+            targetFolderSelect.innerHTML = '<option value="" selected disabled>Lade Ordner...</option>';
+            targetFolderSelect.disabled = true;
+            saveMoveBtn.disabled = true;
+            loadingIndicator.style.display = 'block';
+
+            // Fetch folder list
+            fetch('/api/media/folders')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Fehler beim Laden der Ordnerliste');
+                    }
+                    return response.json();
+                })
+                .then(folders => {
+                    targetFolderSelect.innerHTML = ''; // Clear loading message
+                    // Optionally add root if not already there (should be)
+                    if (!folders.includes('/')) {
+                        folders.unshift('/');
+                    }
+                    folders.forEach(folderPath => {
+                        // Exclude the source folder itself if it's a folder
+                        if (itemType === 'folder' && folderPath === sourcePath) {
+                            return; 
+                        }
+                        // Exclude subfolders of the source folder if moving a folder
+                        if (itemType === 'folder' && folderPath.startsWith(sourcePath + '/')) {
+                             return;
+                         }
+
+                        const option = document.createElement('option');
+                        option.value = folderPath;
+                        option.textContent = folderPath;
+                        targetFolderSelect.appendChild(option);
+                    });
+                    targetFolderSelect.disabled = false; // Enable select
+                    saveMoveBtn.disabled = false; // Enable button
+                    loadingIndicator.style.display = 'none'; // Hide spinner
+                })
+                .catch(error => {
+                    console.error("Error fetching folders:", error);
+                    targetFolderSelect.innerHTML = '<option value="" selected disabled>Fehler!</option>';
+                    loadingIndicator.style.display = 'none'; // Hide spinner
+                    // Keep button disabled
+                });
+
+            moveModal.show();
+        }
+
+        function saveMove() {
+            const isBatch = document.getElementById('moveItemSourcePath').value === '__BATCH__';
+            const targetFolderPath = document.getElementById('targetFolderSelect').value;
+
+            const saveBtn = document.getElementById('saveMoveBtn');
+            const originalBtnHTML = saveBtn.innerHTML;
+            saveBtn.disabled = true;
+
+            const mainLoadingIndicator = document.getElementById('loading-indicator'); // Use main page indicator
+            const errorMessage = document.getElementById('error-message');
+            errorMessage.style.display = 'none'; 
+            mainLoadingIndicator.style.display = 'block'; // Show main loading indicator
+
+            let apiUrl;
+            let payload;
+
+            if (isBatch) {
+                 console.log(`Batch moving ${selectedItems.size} items to folder '${targetFolderPath}'`);
+                 saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Verschiebe...';
+                 apiUrl = '/api/media/batch-move';
+                 payload = {
+                     source_paths: Array.from(selectedItems),
+                     target_folder_path: targetFolderPath
+                 };
+            } else {
+                 // Single item move (get details from hidden fields)
+                 const sourcePath = document.getElementById('moveItemSourcePath').value;
+                 const itemType = document.getElementById('moveItemType').value;
+                 console.log(`Moving ${itemType} from '${sourcePath}' to folder '${targetFolderPath}'`);
+                 saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Wird verschoben...';
+                 apiUrl = '/api/media/move'; // Use existing single move endpoint
+                 payload = { 
+                     source_path: sourcePath,
+                     target_folder_path: targetFolderPath 
+                 };
+            }
+
+            // --- API Call --- 
+            fetch(apiUrl, {
+                method: isBatch ? 'POST' : 'PUT', // POST for batch, PUT for single
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(async response => { 
+                 if (!response.ok) {
+                     let errorMsg = `HTTP error ${response.status}`;
+                     try {
+                         const errData = await response.json();
+                         errorMsg = errData.error || errorMsg;
+                     } catch (parseError) {
+                         console.warn("Could not parse error response as JSON.");
+                     }
+                     throw new Error(errorMsg);
+                 }
+                 try {
+                      return await response.json(); 
+                 } catch(e) { 
+                     return { status: 'success' }; 
+                 }
+             })
+             .then(data => {
+                 console.log("Move response:", data);
+                 moveModal.hide();
+                 // Reload the *parent* directory of the original item(s)
+                 if (isBatch) {
+                      loadDirectoryContent(currentExplorerPath); 
+                      selectedItems.clear(); // Clear selection after successful batch move
+                      updateSelectionUI();
+                 } else {
+                      const sourcePath = document.getElementById('moveItemSourcePath').value;
+                      const parentPath = sourcePath.substring(0, sourcePath.lastIndexOf('/')) || '/';
+                      loadDirectoryContent(parentPath);
+                 }
+             })
+             .finally(() => {
+                 mainLoadingIndicator.style.display = 'none'; // Hide main indicator regardless of outcome
+                 // Re-enable button and restore text
+                 saveBtn.disabled = false;
+                 saveBtn.innerHTML = originalBtnHTML;
+             })
+             .catch(error => {
+                  console.error("Error moving item:", error);
+                  alert(`Fehler beim Verschieben: ${error.message}`);
+                  // Handle batch move specific errors if needed (e.g., show partial failures)
+                  if (isBatch && error.message.includes('failed')) {
+                       // Potentially parse the JSON error from the message to show details
+                       alert("Einige Elemente konnten nicht verschoben werden. Details siehe Konsole oder Server-Log.");
+                  }
+                  // Optionally display error near the modal
+                  // Restore button state even on error
+                  saveBtn.disabled = false;
+                  saveBtn.innerHTML = originalBtnHTML;
+               });
+        }
+
+        function deleteSelectedItems() {
+            const itemsToDelete = Array.from(selectedItems); // Get array of paths
+            if (itemsToDelete.length === 0) {
+                alert("Keine Elemente zum Löschen ausgewählt.");
+                return;
+            }
+
+            if (!confirm(`Sollen die ausgewählten ${itemsToDelete.length} Elemente wirklich gelöscht werden?\nAchtung: Dies kann nicht rückgängig gemacht werden!`)) {
+                return;
+            }
+
+            console.log("Deleting selected items:", itemsToDelete);
+            
+            const deleteBtn = document.getElementById('btn-delete-selected');
+            const originalBtnHTML = deleteBtn.innerHTML;
+            deleteBtn.disabled = true;
+            deleteBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Lösche...';
+
+            fetch('/api/media/batch-delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ paths: itemsToDelete })
+            })
+            .then(async response => {
+                if (!response.ok) {
+                    let errorMsg = `HTTP error ${response.status}`;
+                    try {
+                        const errData = await response.json();
+                        errorMsg = errData.error || (errData.failed ? JSON.stringify(errData.failed) : errorMsg);
+                    } catch (parseError) { /* Ignore */ }
+                    throw new Error(errorMsg);
+                }
+                return await response.json();
+            })
+            .then(results => {
+                console.log("Batch delete response:", results);
+                if (results.failed && results.failed.length > 0) {
+                    // Build error message listing failures
+                    let failureMsg = `Konnte ${results.failed.length} Element(e) nicht löschen:\n`;
+                    results.failed.forEach(item => {
+                        failureMsg += `- ${item.path}: ${item.reason}\n`;
+                    });
+                    alert(failureMsg);
+                }
+                
+                // Always clear selection, update UI, and reload after the operation attempt
+                 selectedItems.clear();
+                 updateSelectionUI(); 
+                 loadDirectoryContent(currentExplorerPath); 
+             })
+             .catch(error => {
+                console.error("Error during batch delete:", error);
+                alert(`Fehler beim Löschen: ${error.message}`);
+                // It might be good to reload even on error to reflect any partial success
+                // or remove items that might have been incorrectly reported as failed.
+                selectedItems.clear(); 
+                updateSelectionUI();
+                loadDirectoryContent(currentExplorerPath);
+             })
+             .finally(() => {
+                 deleteBtn.disabled = false;
+                 deleteBtn.innerHTML = originalBtnHTML;
+                 // UI updates are now handled in .then() and .catch()
+                 // selectedItems.clear(); // REMOVED
+                 // updateSelectionUI();  // REMOVED
+                 // loadDirectoryContent(currentExplorerPath); // REMOVED
+             });
+        }
+
+        function openBatchMoveModal() {
+            if (selectedItems.size === 0) {
+                alert("Keine Elemente zum Verschieben ausgewählt.");
+                return;
+            }
+
+            // Reuse the existing moveModal
+            document.getElementById('moveForm').reset();
+            // Indicate multiple items are being moved
+            document.getElementById('moveItemName').textContent = `${selectedItems.size} Element(e)`; 
+            // Clear hidden single-item inputs (or mark as batch operation)
+            document.getElementById('moveItemSourcePath').value = '__BATCH__'; // Special value to indicate batch
+            document.getElementById('moveItemType').value = 'batch';
+
+            // --- Populate Folder List (similar to openMoveModal) --- 
+            const targetFolderSelect = document.getElementById('targetFolderSelect');
+            const saveMoveBtn = document.getElementById('saveMoveBtn');
+            const loadingIndicator = document.getElementById('move-folder-loading');
+
+            targetFolderSelect.innerHTML = '<option value="" selected disabled>Lade Ordner...</option>';
+            targetFolderSelect.disabled = true;
+            saveMoveBtn.disabled = true;
+            loadingIndicator.style.display = 'block';
+
+            fetch('/api/media/folders')
+                .then(response => {
+                    if (!response.ok) throw new Error('Fehler beim Laden der Ordnerliste');
+                    return response.json();
+                })
+                .then(folders => {
+                    targetFolderSelect.innerHTML = ''; 
+                    if (!folders.includes('/')) folders.unshift('/');
+                    
+                    const sourcePathsArray = Array.from(selectedItems); // Get selected paths
+
+                    folders.forEach(folderPath => {
+                        // Prevent moving selection into one of the selected folders
+                        if (sourcePathsArray.some(srcPath => folderPath === srcPath && document.getElementById(`file-list`).querySelector(`li[data-path="${srcPath}"] .bi-folder-fill`))) {
+                             return; // Don't list a selected folder as a target
+                        }
+                        // Prevent moving selection into a subfolder of a selected folder
+                        if (sourcePathsArray.some(srcPath => document.getElementById(`file-list`).querySelector(`li[data-path="${srcPath}"] .bi-folder-fill`) && folderPath.startsWith(srcPath + '/'))) {
+                            return;
+                        }
+
+                        const option = document.createElement('option');
+                        option.value = folderPath;
+                        option.textContent = folderPath;
+                        targetFolderSelect.appendChild(option);
+                    });
+                    targetFolderSelect.disabled = false; 
+                    saveMoveBtn.disabled = false; 
+                    loadingIndicator.style.display = 'none'; 
+                })
+                .catch(error => {
+                    console.error("Error fetching folders:", error);
+                    targetFolderSelect.innerHTML = '<option value="" selected disabled>Fehler!</option>';
+                    loadingIndicator.style.display = 'none'; 
+                });
+            
+            moveModal.show();
+        }
+
+        function performSearch(query) {
+             console.log(`Performing search for: "${query}"`);
+             const fileList = document.getElementById('file-list');
+             const loadingIndicator = document.getElementById('loading-indicator');
+             const errorMessage = document.getElementById('error-message');
+
+             fileList.innerHTML = ''; // Clear list
+             errorMessage.style.display = 'none';
+             selectedItems.clear(); // Clear selection when searching
+             updateSelectionUI(); // Hide action bar
+
+             if (!query) {
+                 // If query is empty, load the current directory view
+                 console.log("Empty query, loading current directory.");
+                 document.getElementById('breadcrumb-list').style.display = ''; // Show breadcrumbs
+                 document.getElementById('btn-new-folder').style.display = ''; // Show New Folder button
+                 loadDirectoryContent(currentExplorerPath);
+                 return;
+             }
+
+             // --- Prepare UI for search results --- 
+             loadingIndicator.style.display = 'block';
+             document.getElementById('breadcrumb-list').style.display = 'none'; // Hide breadcrumbs
+             document.getElementById('btn-new-folder').style.display = 'none'; // Hide New Folder button
+
+             // --- Fetch search results --- 
+             fetch(`/api/media/search?query=${encodeURIComponent(query)}`)
+                 .then(response => {
+                     if (!response.ok) {
+                         return response.json().then(err => { throw new Error(err.error || `HTTP error ${response.status}`) });
+                     }
+                     return response.json();
+                 })
+                 .then(results => {
+                     loadingIndicator.style.display = 'none';
+                     if (!results || results.length === 0) {
+                         fileList.innerHTML = '<li class="list-group-item text-muted">Keine Ergebnisse für Ihre Suche gefunden.</li>';
+                     } else {
+                         console.log(`Search returned ${results.length} results.`);
+                         // Sort results? (e.g., folders first)
+                         results.sort((a, b) => {
+                             if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+                             return a.path.localeCompare(b.path);
+                         });
+
+                         results.forEach(item => {
+                             // --- Create List Item for Search Result --- 
+                             const listItem = document.createElement('li');
+                             listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+                             listItem.dataset.path = item.path; 
+                             listItem.dataset.name = item.name; 
+                             const isChecked = selectedItems.has(item.path) ? 'checked' : '';
+                             let iconClass = '';
+                             const isFolder = item.type === 'folder'; // Define isFolder here
+                             if (isFolder) {
+                                 iconClass = 'bi-folder-fill text-primary';
+                                 // Make folder name clickable to navigate in search results?
+                                 // listItem.onclick = () => loadDirectoryContent(item.path); // Optional
+                             } else {
+                                 const ext = item.name.split('.').pop().toLowerCase();
+                                 iconClass = ('mp3,wav,ogg').includes(ext) ? 'bi-file-earmark-music-fill text-info' : 'bi-file-earmark-fill text-secondary';
+                             }
+
+                             listItem.innerHTML = `
+                                 <div class="flex-grow-1 d-flex align-items-center me-2 list-item-main" style="min-width: 0;"> <!-- Left side: Checkbox, Icon, Name/Path -->
+                                     <input type="checkbox" class="form-check-input me-2 item-select-checkbox" data-path="${item.path}" ${isChecked}>
+                                     <i class="bi ${iconClass} me-1"></i>
+                                     ${item.type === 'file' && item.is_assigned ? '<i class="bi bi-bookmark-check-fill text-success me-1" title="In einer Playlist"></i>' : ''}
+                                     <span class="list-item-name text-truncate" title="${item.name}">
+                                         ${item.name}
+                                     </span>
+                                 </div>
+                                 <div class="flex-shrink-0 list-item-actions"> <!-- Right side: Buttons -->
+                                     <button class="btn btn-sm btn-outline-secondary me-1 btn-rename" title="Umbenennen" data-path="${item.path}" data-name="${item.name}" data-type="${item.type}"><i class="bi bi-pencil-fill"></i></button>
+                                     <button class="btn btn-sm btn-outline-primary me-1 btn-move" title="Verschieben" data-path="${item.path}" data-name="${item.name}" data-type="${item.type}"><i class="bi bi-folder-symlink-fill"></i></button>
+                                     ${item.type === 'file' && ['.mp3', '.wav', '.ogg'].some(ext => item.name.toLowerCase().endsWith(ext)) ? 
+                                        `<button class="btn btn-sm btn-outline-success me-1 btn-assign-tag" title="Tag zuweisen" data-path="${item.path}" data-name="${item.name}"><i class="bi bi-tag-fill"></i></button>` : ''
+                                     }
+                                     <button class="btn btn-sm btn-outline-danger btn-delete" title="Löschen" data-path="${item.path}" data-name="${item.name}" data-type="${item.type}"><i class="bi bi-trash-fill"></i></button>
+                                 </div>
+                             `;
+                             fileList.appendChild(listItem);
+                            
+                             // --- Add Event Listeners (same as in loadDirectoryContent) ---
+                             const renameBtn = listItem.querySelector('.btn-rename');
+                             const deleteBtn = listItem.querySelector('.btn-delete');
+                             const moveBtn = listItem.querySelector('.btn-move');
+                             const assignTagBtn = listItem.querySelector('.btn-assign-tag');
+                             const fileNameSpan = listItem.querySelector('.list-item-name');
+                             
+                             if (renameBtn) { renameBtn.onclick = (e) => { e.stopPropagation(); openRenameModal(item.path, item.name, item.type); }; }
+                             if (deleteBtn) { deleteBtn.onclick = (e) => { e.stopPropagation(); if(item.type==='file') deleteFile(item.path, item.name); else deleteFolder(item.path, item.name); }; }
+                             if (moveBtn) { moveBtn.onclick = (e) => { e.stopPropagation(); openMoveModal(item.path, item.name, item.type); }; }
+                             
+                             if (assignTagBtn) {
+                                assignTagBtn.onclick = (event) => {
+                                    event.stopPropagation();
+                                    openAssignTagModal(item.path, item.name);
+                                };
+                            }
+
+                            // Add listener for playlist info click on file names
+                            if (!isFolder && fileNameSpan) {
+                                fileNameSpan.style.cursor = 'pointer';
+                                fileNameSpan.onclick = (event) => {
+                                    event.stopPropagation();
+                                    showPlaylistInfo(item.path, item.name);
+                                };
+                            }
+                            
+                            // Prevent clicks on checkbox from triggering folder navigation
+                            const checkbox = listItem.querySelector('.item-select-checkbox');
+                            if (checkbox) {
+                                checkbox.onclick = (event) => {
+                                    event.stopPropagation(); 
+                                };
+                            }
+                            // --- End Event Listeners ---
+                            
+                        }); // end forEach result
+                    } // end else (results found)
+                 })
+                 .catch(error => {
+                     loadingIndicator.style.display = 'none';
+                     errorMessage.textContent = `Fehler bei der Suche: ${error.message}`;
+                     errorMessage.style.display = 'block';
+                     console.error('Error performing search:', error);
+                 });
+         }
+
+        function openAssignTagModal(itemPath, itemName) {
+            console.log('Opening assign tag modal for:', itemPath);
+            const modal = $('#assignTagModal');
+            modal.data('item-path', itemPath); // Store the path
+            modal.data('item-name', itemName);
+            modal.data('mode', 'single'); // Set mode to single
+            modal.find('.modal-title').text(`Tag für "${itemName}" zuweisen`);
+
+            // Clear previous options and show loading state
+            const tagSelect = modal.find('#tagSelect');
+            tagSelect.empty().append('<option selected disabled>Laden...</option>');
+            tagSelect.prop('disabled', true);
+            modal.find('#saveTagButton').prop('disabled', true);
+
+
+            // Fetch tags from the backend
+            fetch('/api/tags')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(tags => {
+                    tagSelect.empty(); // Clear loading state
+                    if (tags.length === 0) {
+                        tagSelect.append('<option selected disabled>Keine Tags verfügbar</option>');
+                         modal.find('#saveTagButton').prop('disabled', true); // Keep button disabled
+                    } else {
+                        tags.forEach(tag => {
+                            tagSelect.append($('<option>', {
+                                value: tag.id,
+                                text: tag.name
+                            }));
+                        });
+                        tagSelect.prop('disabled', false);
+                        modal.find('#saveTagButton').prop('disabled', false); // Enable button
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching tags:', error);
+                    tagSelect.empty().append('<option selected disabled>Fehler beim Laden</option>');
+                     modal.find('#saveTagButton').prop('disabled', true);
+                });
+
+            modal.modal('show');
+        }
+
+        function openBatchAssignTagModal() {
+            const audioFiles = Array.from(selectedItems).filter(itemPath => {
+                const itemName = itemPath.split('/').pop();
+                return ['.mp3', '.wav', '.ogg', '.flac', '.m4a'].some(ext => itemName.toLowerCase().endsWith(ext));
+            });
+
+            if (audioFiles.length === 0) {
+                alert('Bitte wählen Sie mindestens eine Audio-Datei aus.');
+                return;
+            }
+             if (audioFiles.length !== selectedItems.size) {
+                alert('Es können nur Audio-Dateien getaggt werden. Bitte passen Sie Ihre Auswahl an.');
+                return;
+            }
+
+            console.log('Opening batch assign tag modal for:', audioFiles);
+            const modal = $('#assignTagModal');
+            modal.data('mode', 'batch'); // Set mode to batch
+            modal.data('item-path', null); // Clear single item path if any
+            modal.data('item-name', null); // Clear single item name
+            modal.find('.modal-title').text(`${audioFiles.length} Audio-Datei(en) Tag zuweisen`);
+
+            // Clear previous options and show loading state (same as single mode)
+            const tagSelect = modal.find('#tagSelect');
+            tagSelect.empty().append('<option selected disabled>Laden...</option>');
+            tagSelect.prop('disabled', true);
+            modal.find('#saveTagButton').prop('disabled', true);
+
+            // Fetch tags (same as single mode)
+            fetch('/api/tags')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(tags => {
+                    tagSelect.empty();
+                    if (tags.length === 0) {
+                        tagSelect.append('<option selected disabled>Keine Tags verfügbar</option>');
+                         modal.find('#saveTagButton').prop('disabled', true);
+                    } else {
+                        tags.forEach(tag => {
+                            tagSelect.append($('<option>', {
+                                value: tag.id,
+                                text: tag.name
+                            }));
+                        });
+                        tagSelect.prop('disabled', false);
+                        modal.find('#saveTagButton').prop('disabled', false);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching tags:', error);
+                    tagSelect.empty().append('<option selected disabled>Fehler beim Laden</option>');
+                     modal.find('#saveTagButton').prop('disabled', true);
+                });
+
+            modal.modal('show');
+        }
+
+        function saveTagAssignment() {
+            const modal = $('#assignTagModal');
+            const mode = modal.data('mode');
+            const tagId = modal.find('#tagSelect').val();
+            const saveButton = modal.find('#saveTagButton');
+            const spinner = saveButton.find('.spinner-border');
+
+            if (!tagId) {
+                alert('Bitte wählen Sie einen Tag aus.');
+                return;
+            }
+
+            saveButton.prop('disabled', true);
+            spinner.show();
+
+            let url;
+            let payload;
+
+            if (mode === 'single') {
+                const itemPath = modal.data('item-path');
+                if (!itemPath) {
+                    console.error("Single mode selected but itemPath is missing.");
+                    alert('Ein Fehler ist aufgetreten (Fehlender Dateipfad).');
+                    saveButton.prop('disabled', false);
+                    spinner.hide();
+                    return;
+                }
+                url = '/api/assign-tag';
+                payload = {
+                    tag_id: tagId,
+                    file_path: itemPath
+                };
+                console.log('Assigning single tag:', payload);
+
+            } else if (mode === 'batch') {
+                 const audioFiles = Array.from(selectedItems).filter(itemPath => {
+                     const itemName = itemPath.split('/').pop();
+                     return ['.mp3', '.wav', '.ogg', '.flac', '.m4a'].some(ext => itemName.toLowerCase().endsWith(ext));
+                 });
+                 if (audioFiles.length === 0) {
+                     console.error("Batch mode selected but no audio files found in selection.");
+                     alert('Ein Fehler ist aufgetreten (Keine Audiodateien zur Zuweisung gefunden).');
+                     saveButton.prop('disabled', false);
+                     spinner.hide();
+                     return;
+                 }
+                url = '/api/batch-assign-tag';
+                payload = {
+                    tag_id: tagId,
+                    file_paths: audioFiles // Send the filtered list
+                };
+                console.log('Assigning batch tag:', payload);
+            } else {
+                console.error("Unknown mode:", mode);
+                alert('Ein unbekannter Fehler ist aufgetreten.');
+                saveButton.prop('disabled', false);
+                spinner.hide();
+                return;
+            }
+
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            })
+            .then(response => response.json().then(data => ({ ok: response.ok, status: response.status, data })))
+            .then(({ok, status, data}) => {
+                if (ok) {
+                    console.log('Tag assignment successful:', data.message);
+                    modal.modal('hide');
+                    // Reload directory content to show updated assignment indicators
+                    loadDirectoryContent(currentExplorerPath); 
+                    // No need to clear selection for single assignment,
+                    // but might be desired after batch assignment?
+                    // For now, let's keep selection after batch assignment too.
+                    // updateSelectionUI(); // Uncomment if selection should be cleared
+                } else {
+                    console.error('Tag assignment failed:', data.error || `HTTP error ${status}`);
+                    alert(`Fehler beim Zuweisen des Tags: ${data.error || 'Unbekannter Fehler'}`);
+                     saveButton.prop('disabled', false); // Re-enable button on error
+                }
+            })
+            .catch(error => {
+                console.error('Error during tag assignment fetch:', error);
+                alert('Ein Netzwerkfehler ist beim Zuweisen des Tags aufgetreten.');
+                 saveButton.prop('disabled', false); // Re-enable button on error
+            })
+            .finally(() => {
+                // Ensure spinner is hidden and button state is potentially reset
+                 if (!saveButton.prop('disabled')) { // If not re-enabled on error, re-enable now
+                     saveButton.prop('disabled', false);
+                 }
+                 spinner.hide();
+                 // Reset mode data? Probably not needed as it's set on open.
+                 // modal.removeData('mode');
+                 // modal.removeData('item-path');
+                 // modal.removeData('item-name');
+            });
+        }
+
+        // --- Show Playlist Info --- 
+        async function showPlaylistInfo(filePath, fileName) {
+            const playlistModalElement = document.getElementById('playlistInfoModal');
+            if (!playlistModalElement) {
+                 console.error("Playlist info modal element (#playlistInfoModal) not found!");
+                 alert('Fehler: Playlist-Info-Modal nicht gefunden.');
+                 return;
+            }
+
+            // --- Find ALL required elements FIRST --- 
+            const playlistInfoFileNameSpan = playlistModalElement.querySelector('#playlistInfoFileName'); 
+            const playlistInfoListUl = playlistModalElement.querySelector('#playlistInfoList');
+            const playlistInfoLoadingLi = playlistModalElement.querySelector('#playlistInfoLoading'); 
+            const playlistInfoNoneFoundLi = playlistModalElement.querySelector('#playlistInfoNoneFound');
+
+            // Check if inner elements were found 
+            let missingElement = false;
+            if (!playlistInfoFileNameSpan) { console.error("Element not found: #playlistInfoFileName"); missingElement = true; }
+            if (!playlistInfoListUl) { console.error("Element not found: #playlistInfoList"); missingElement = true; }
+            if (!playlistInfoLoadingLi) { console.error("Element not found: #playlistInfoLoading"); missingElement = true; }
+            if (!playlistInfoNoneFoundLi) { console.error("Element not found: #playlistInfoNoneFound"); missingElement = true; }
+
+            if (missingElement) {
+                 alert('Fehler beim Anzeigen der Playlist-Info: Benötigte Elemente fehlen. Details in der Konsole.');
+                 return; 
+            }
+            // --------------------------------------------
+
+            // --- Reset State and Show Loading --- 
+            playlistInfoFileNameSpan.textContent = fileName; // Set file name
+            // Clear only *dynamic* list items (playlists or error messages from previous calls)
+            // Keep Loading and NoneFound elements, just hide/show them.
+            playlistInfoListUl.querySelectorAll('li:not(#playlistInfoLoading):not(#playlistInfoNoneFound)').forEach(li => li.remove());
+            playlistInfoLoadingLi.style.display = 'list-item'; // Show loading (use list-item for li)
+            playlistInfoNoneFoundLi.style.display = 'none';  // Hide none found
+            // -------------------------------------
+            
+            // Show the modal using Bootstrap 5 JS API
+            const modalInstance = bootstrap.Modal.getOrCreateInstance(playlistModalElement);
+            modalInstance.show();
+
+            // --- Fetch and Display Data --- 
+            try {
+                const response = await fetch(`/api/media/file-playlists?path=${encodeURIComponent(filePath)}`);
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+                const tags = await response.json(); // Expecting [{tag_id: ..., name: ...}, ...]
+
+                if (tags.length === 0) {
+                    playlistInfoNoneFoundLi.style.display = 'list-item'; // Show 'None Found' message
+                } else {
+                    tags.forEach(tag => {
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item';
+                        // Show tag name if available and not empty, otherwise show the tag's RFID
+                        li.textContent = (tag.name && tag.name.trim() !== '') ? tag.name : `Tag: ${tag.tag_id}`; 
+                        // Insert before the hidden loading/none found items
+                        playlistInfoListUl.insertBefore(li, playlistInfoLoadingLi); 
+                    });
+                }
+            } catch (error) {
+                console.error('Error fetching tag info:', error);
+                const errorLi = document.createElement('li');
+                errorLi.className = 'list-group-item list-group-item-danger';
+                errorLi.textContent = `Fehler beim Laden der Tag-Info: ${error.message}`;
+                 // Insert before the hidden loading/none found items
+                playlistInfoListUl.insertBefore(errorLi, playlistInfoLoadingLi);
+            } finally {
+                 // Ensure loading indicator is hidden after fetch attempt
+                 playlistInfoLoadingLi.style.display = 'none';
+            }
+            // ------------------------------
+        }
+
+    </script>
+</body>
+</html> 

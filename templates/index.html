@@ -33,11 +33,12 @@
                     <li class="nav-item">
                         <a class="nav-link active" aria-current="page" href="/">Verwaltung</a>
                     </li>
-                    {% if player_available %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/explorer">Explorer</a>
+                    </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/player">Player</a>
                     </li>
-                    {% endif %}
                 </ul>
             </div>
         </div>
@@ -102,12 +103,12 @@
             </div>
             <div class="card-body">
                 <div id="drop-zone" class="border rounded p-5 text-center mb-3" style="border-style: dashed !important;">
-                    <p>MP3-Dateien hierher ziehen oder</p>
-                    <input type="file" id="file-input" accept="audio/mpeg" multiple style="display: none;">
+                    <p>MP3, WAV oder OGG Dateien hierher ziehen oder</p>
+                    <input type="file" id="file-input" accept="audio/mpeg,audio/wav,audio/ogg" multiple style="display: none;">
                     <button type="button" class="btn btn-secondary" onclick="document.getElementById('file-input').click();">
                         <i class="bi bi-folder2-open"></i> Dateien auswählen
                     </button>
-                    <p class="form-text mt-2">Nur MP3-Dateien erlaubt.</p>
+                    <p class="form-text mt-2">Nur MP3, WAV oder OGG Dateien erlaubt.</p>
                 </div>
                 <div id="upload-progress" class="mt-3" style="display: none;">
                     <h5>Upload Fortschritt:</h5>
@@ -146,31 +147,41 @@
     </div>
     
     <!-- Modal für MP3 zur Playlist hinzufügen -->
-    <div class="modal fade" id="addToPlaylistModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
+    <div class="modal fade" id="addToPlaylistModal" tabindex="-1" aria-labelledby="addToPlaylistModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">MP3s zur Playlist hinzufügen</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <h5 class="modal-title" id="addToPlaylistModalLabel">Dateien zur Playlist hinzufügen</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <form id="addToPlaylistForm">
-                        <div class="mb-3">
-                            <label for="mp3Files" class="form-label">MP3 Dateien</label>
-                            <select class="form-select" id="mp3Files" multiple size="10">
-                                {% for mp3 in mp3_files %}
-                                <option value="{{ mp3 }}">{{ mp3 }}</option>
-                                {% endfor %}
-                            </select>
-                            <div class="form-text">
-                                Halten Sie Strg gedrückt, um mehrere Dateien auszuwählen
-                            </div>
+                    <nav aria-label="breadcrumb" id="modal-breadcrumb" class="mb-2">
+                        <ol class="breadcrumb mb-1">
+                            <!-- Breadcrumb items will be added dynamically -->
+                        </ol>
+                    </nav>
+
+                    <div id="modal-loading-indicator" class="text-center my-3" style="display: none;">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Laden...</span>
                         </div>
-                    </form>
+                    </div>
+
+                    <ul class="list-group" id="modal-file-list">
+                        <!-- Items will be loaded here -->
+                    </ul>
+                    
+                    <div id="modal-selection-info" class="mt-2 text-muted" style="font-size: 0.9em;">
+                         0 Datei(en) ausgewählt.
+                     </div>
+                    
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
-                    <button type="button" class="btn btn-primary" id="saveToPlaylist">Hinzufügen</button>
+                    <button type="button" class="btn btn-primary" id="saveToPlaylist" disabled>
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="display: none;"></span>
+                         Auswahl hinzufügen
+                     </button> 
                 </div>
             </div>
         </div>
@@ -193,11 +204,33 @@
         const uploadProgressDiv = document.getElementById('upload-progress');
         const uploadList = document.getElementById('upload-list');
         
+        // --- Modal 'Add to Playlist' specific variables ---
+        let currentModalPath = '/'; // Path within the modal browser
+        let selectedModalItems = new Set(); // Set to store selected file paths
+        const modalLoadingIndicator = document.getElementById('modal-loading-indicator');
+        const modalFileList = document.getElementById('modal-file-list');
+        const modalBreadcrumb = document.getElementById('modal-breadcrumb').querySelector('.breadcrumb');
+        const modalSelectionInfo = document.getElementById('modal-selection-info');
+        const modalSaveButton = document.getElementById('saveToPlaylist');
+        
         // Modal-Instanzen initialisieren
         document.addEventListener('DOMContentLoaded', function() {
             addTagModal = new bootstrap.Modal(document.getElementById('addTagModal'));
-            addToPlaylistModal = new bootstrap.Modal(document.getElementById('addToPlaylistModal'));
+            // Listener for when the modal is shown
+            const addToPlaylistModalElement = document.getElementById('addToPlaylistModal');
+            addToPlaylistModal = new bootstrap.Modal(addToPlaylistModalElement);
+            addToPlaylistModalElement.addEventListener('show.bs.modal', function (event) {
+                console.log("Add to Playlist Modal opened");
+                currentModalPath = '/'; // Reset path
+                selectedModalItems.clear(); // Clear previous selection
+                updateModalSelectionUI(); // Update button state and count
+                loadModalDirectoryContent(currentModalPath); // Load root content
+            });
+
             loadTags();
+
+             // Add listener for the modal save button
+             modalSaveButton.addEventListener('click', saveModalSelectionToPlaylist);
         });
         
         // Socket.IO Events
@@ -227,8 +260,9 @@
             console.log("Loading tags...");
             fetch('/api/tags')
                 .then(response => response.json())
-                .then(tags => {
-                    console.log("Tags received:", tags);
+                .then(data => {
+                    console.log("Tags received:", data);
+                    const tags = data.tags || data; // Handle both formats
                     const tagList = document.getElementById('tag-list');
                     tagList.innerHTML = '';
                     
@@ -506,70 +540,18 @@
             }
         }
         
-        // Playlist-Item hinzufügen
+        // Playlist-Item hinzufügen Button Listener
         document.getElementById('add-to-playlist').addEventListener('click', function() {
             if (!currentPlaylistId) {
                 alert('Bitte zuerst einen Tag mit einer Playlist auswählen.');
                 return;
             }
-            fetch('/api/mp3-files')
-                .then(response => response.json())
-                .then(files => {
-                    const selectElement = document.getElementById('mp3Files');
-                    selectElement.innerHTML = '';
-                    files.forEach(file => {
-                        const option = document.createElement('option');
-                        option.value = file;
-                        option.textContent = file;
-                        selectElement.appendChild(option);
-                    });
-                    addToPlaylistModal.show();
-                })
-                .catch(error => {
-                    console.error("Error fetching MP3 files:", error);
-                    alert('Fehler beim Laden der MP3-Liste.');
-                });
+            // Nur noch das Modal anzeigen. Das Laden des Inhalts 
+            // geschieht jetzt über den 'show.bs.modal' Event Listener.
+            console.log("Opening Add Files modal via button click.");
+            addToPlaylistModal.show(); 
         });
-        
-        // Event-Listener für den Speichern-Button im MP3-Modal
-        document.getElementById('saveToPlaylist').addEventListener('click', function() {
-            const selectedFiles = Array.from(document.getElementById('mp3Files').selectedOptions).map(option => option.value);
-            if (selectedFiles.length === 0) {
-                alert('Bitte mindestens eine MP3-Datei auswählen.');
-                return;
-            }
-            if (!currentPlaylistId) {
-                alert('Interner Fehler: Keine Playlist ID ausgewählt.');
-                return;
-            }
-            console.log(`Adding files to playlist ${currentPlaylistId}:`, selectedFiles);
-            
-            fetch(`/api/playlists/${currentPlaylistId}/items/batch`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ mp3_files: selectedFiles })
-            })
-            .then(response => {
-                 if (!response.ok) {
-                     return response.json().then(err => { throw new Error(err.error || `HTTP error ${response.status}`) });
-                 }
-                 return response.json();
-             })
-            .then(data => {
-                console.log("Add items response:", data);
-                addToPlaylistModal.hide();
-                if (currentTagId) {
-                    loadPlaylistForTag(currentTagId);
-                }
-            })
-            .catch(error => {
-                 console.error("Error adding items to playlist:", error);
-                 alert('Fehler beim Hinzufügen der MP3s: ' + error.message);
-             });
-        });
-        
+
         // Playlist-Item löschen
         function deletePlaylistItem(itemId) {
              if (!itemId) return;
@@ -646,12 +628,29 @@
         }
 
         function handleFiles(files) {
-            const validFiles = [...files].filter(file => file.type === 'audio/mpeg');
-            const invalidFiles = [...files].filter(file => file.type !== 'audio/mpeg');
+            // Log the type of each file for debugging
+            console.log("Files selected:");
+            [...files].forEach(file => {
+                console.log(`  - Name: ${file.name}, Type: ${file.type}`);
+            });
+
+            const allowedMimeTypes = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/x-wav', 'application/ogg']; 
+            const allowedExtensions = ['.mp3', '.wav', '.ogg'];
+
+            const validFiles = [...files].filter(file => {
+                const fileExtension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+                // Accept if MIME type is known OR if MIME type is empty AND extension is allowed
+                return allowedMimeTypes.includes(file.type) || (file.type === '' && allowedExtensions.includes(fileExtension));
+            });
+            const invalidFiles = [...files].filter(file => {
+                 const fileExtension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+                 // Invalid if MIME type is not allowed AND (MIME type is not empty OR extension is not allowed)
+                 return !allowedMimeTypes.includes(file.type) && (file.type !== '' || !allowedExtensions.includes(fileExtension));
+            });
 
             if (invalidFiles.length > 0) {
                 const invalidNames = invalidFiles.map(f => f.name).join(', ');
-                alert(`Folgende Dateien sind keine MP3s und werden ignoriert: ${invalidNames}`);
+                alert(`Folgende Dateien haben keinen erlaubten Typ (MP3, WAV, OGG) und werden ignoriert: ${invalidNames}`);
             }
             
             if (validFiles.length === 0) {
@@ -680,43 +679,273 @@
             listItem.appendChild(statusSpan);
             uploadList.appendChild(listItem);
 
-            fetch('/api/upload-mp3', {
-                method: 'POST',
-                body: formData
-                // No 'Content-Type' header, browser sets it correctly for FormData
-            })
-            .then(response => {
-                // Check if response is ok (status in the range 200-299)
-                if (!response.ok) {
-                    // Try to parse error json, otherwise throw generic error
-                    return response.json().catch(() => {
-                        throw new Error(`HTTP error ${response.status}`);
-                    }).then(err => { throw new Error(err.error || `HTTP error ${response.status}`) });
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/api/upload-mp3', true);
+
+            xhr.upload.addEventListener('progress', function(e) {
+                if (e.lengthComputable) {
+                    const percentComplete = Math.round((e.loaded / e.total) * 100);
+                    statusSpan.style.width = percentComplete + '%';
+                    statusSpan.setAttribute('aria-valuenow', percentComplete);
+                    statusSpan.textContent = percentComplete + '%';
                 }
-                return response.json(); // Parse success json
-            })
-            .then(data => {
-                console.log('Upload success:', data);
-                listItem.textContent = `${file.name}`; // Remove "(Wird hochgeladen...)"
-                statusSpan.className = 'badge bg-success rounded-pill';
-                statusSpan.innerHTML = '<i class="bi bi-check-circle-fill"></i> Fertig';
-                listItem.appendChild(statusSpan); // Re-append updated span
-                // Optionally refresh the MP3 list in the "Add to Playlist" modal if it's open or next time it opens
-                // fetchMp3ListForModal(); // Might need to implement this
-            })
-            .catch(error => {
-                console.error('Upload error:', error);
-                listItem.textContent = `${file.name}`; // Remove "(Wird hochgeladen...)"
-                statusSpan.className = 'badge bg-danger rounded-pill';
-                statusSpan.innerHTML = '<i class="bi bi-x-octagon-fill"></i> Fehler';
-                listItem.appendChild(statusSpan); // Re-append updated span
-                listItem.title = error.message; // Show error on hover
             });
-            // Note: Real progress requires XMLHttpRequest which is more complex.
-            // This just shows "uploading" then success/error.
-             statusSpan.textContent = '...'; // Simple intermediate state
+
+            xhr.onload = function() {
+                listItem.classList.remove('uploading');
+                statusSpan.classList.add('bg-success');
+                statusSpan.textContent = 'Fertig';
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    console.log("Upload successful, server response:", xhr.responseText);
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        if (response.status === 'success') {
+                             const originalName = response.original_filename || 'Unbekannt';
+                             const savedName = response.saved_filename || 'Unbekannt';
+                             const savedPath = response.relative_path || savedName; // Use relative_path if available
+                             listItem.textContent = `${originalName} (gespeichert in: ${savedPath})`; // Show path
+                             listItem.classList.add('list-group-item-success');
+                        } else {
+                             listItem.textContent += ` - Fehler: ${response.error || 'Unbekannter Serverfehler'}`;
+                             listItem.classList.add('list-group-item-danger');
+                        }
+                    } catch (e) {
+                        console.error("Error parsing upload response:", e);
+                        listItem.textContent += ` - Fehler beim Verarbeiten der Serverantwort`;
+                        listItem.classList.add('list-group-item-danger');
+                    }
+                } else {
+                    console.error("Upload failed, status:", xhr.status, "Response:", xhr.responseText);
+                     let errorMsg = `HTTP-Fehler ${xhr.status}`;
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        errorMsg = response.error || errorMsg;
+                    } catch (e) { /* Ignore parsing error */ }
+                    listItem.textContent += ` - Fehler: ${errorMsg}`;
+                    listItem.classList.add('list-group-item-danger');
+                    statusSpan.classList.remove('bg-success');
+                    statusSpan.classList.add('bg-danger');
+                    statusSpan.textContent = 'Fehlgeschlagen';
+                }
+            };
+
+            xhr.onerror = function() {
+                console.error("Network error during upload.");
+                listItem.classList.remove('uploading');
+                listItem.textContent += ' - Netzwerkfehler';
+                listItem.classList.add('list-group-item-danger');
+                statusSpan.classList.remove('bg-success');
+                statusSpan.classList.add('bg-danger');
+                statusSpan.textContent = 'Fehler';
+            };
+
+            xhr.send(formData);
+        }
+
+        // Function to refresh the MP3 list in the AddToPlaylist modal
+        function refreshMp3ListInModal() {
+            const selectElement = document.getElementById('mp3Files');
+            if (!selectElement) return; // Exit if modal element not found
+            console.log("Refreshing MP3 list in modal...");
+
+            fetch('/api/mp3-files')
+                .then(response => response.json())
+                .then(files => {
+                    selectElement.innerHTML = ''; // Clear existing options
+                    files.forEach(file => {
+                        const option = document.createElement('option');
+                        option.value = file;
+                        option.textContent = file;
+                        selectElement.appendChild(option);
+                    });
+                    console.log("MP3 list in modal refreshed.");
+                })
+                .catch(error => {
+                    console.error("Error refreshing MP3 files for modal:", error);
+                    // Optionally display an error inside the modal?
+                });
         }
         
+        // --- Functions for 'Add to Playlist' Modal ---
+
+        function loadModalDirectoryContent(path) {
+            console.log(`Modal: Loading content for path: ${path}`);
+            currentModalPath = path;
+            modalLoadingIndicator.style.display = 'block';
+            modalFileList.innerHTML = ''; // Clear list while loading
+            renderModalBreadcrumbs(path);
+
+            fetch(`/api/media/list-modal-content?path=${encodeURIComponent(path)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(items => {
+                    console.log("Modal: Received items:", items);
+                    renderModalFileList(items);
+                })
+                .catch(error => {
+                    console.error("Modal: Error loading directory content:", error);
+                    modalFileList.innerHTML = '<li class="list-group-item text-danger">Fehler beim Laden des Verzeichnisses.</li>';
+                })
+                .finally(() => {
+                    modalLoadingIndicator.style.display = 'none';
+                });
+        }
+
+        function renderModalBreadcrumbs(path) {
+            modalBreadcrumb.innerHTML = ''; 
+            let currentPath = '';
+            const pathParts = path.split('/').filter(part => part !== '');
+
+            // Add root breadcrumb
+            const rootItem = document.createElement('li');
+            rootItem.className = 'breadcrumb-item';
+            rootItem.innerHTML = `<a href="#" onclick="loadModalDirectoryContent('/'); return false;">/ (root)</a>`;
+            modalBreadcrumb.appendChild(rootItem);
+
+            // Add intermediate parts
+            pathParts.forEach((part, index) => {
+                currentPath += '/' + part;
+                const item = document.createElement('li');
+                item.className = 'breadcrumb-item';
+                // Make the last part active, others clickable links
+                if (index === pathParts.length - 1) {
+                    item.classList.add('active');
+                    item.setAttribute('aria-current', 'page');
+                    item.textContent = part;
+                } else {
+                     // Ensure correct path for intermediate links
+                    const linkPath = ('/ ' + pathParts.slice(0, index + 1).join('/')).replace('/ ','/');
+                    item.innerHTML = `<a href="#" onclick="loadModalDirectoryContent('${linkPath}'); return false;">${part}</a>`;
+                }
+                modalBreadcrumb.appendChild(item);
+            });
+        }
+
+         function renderModalFileList(items) {
+            modalFileList.innerHTML = ''; // Clear previous items
+
+            if (items.length === 0) {
+                modalFileList.innerHTML = '<li class="list-group-item text-muted">Ordner ist leer oder enthält keine Audiodateien.</li>';
+                return;
+            }
+
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                li.style.cursor = 'pointer';
+
+                let content = '';
+                if (item.type === 'folder') {
+                    li.onclick = () => loadModalDirectoryContent(item.path);
+                     content = `
+                        <div class="d-flex align-items-center text-truncate">
+                            <i class="bi bi-folder-fill me-2 text-primary"></i>
+                            <span class="text-truncate">${item.name}</span>
+                        </div>
+                        <i class="bi bi-chevron-right"></i>
+                    `;
+                } else { // Audio file
+                    const isSelected = selectedModalItems.has(item.path);
+                    li.onclick = (event) => {
+                        // Prevent row click from toggling if checkbox itself is clicked
+                        if (event.target.type !== 'checkbox') {
+                            toggleModalItemSelection(item.path, li.querySelector('input[type="checkbox"]'));
+                         }
+                    };
+                    content = `
+                        <div class="form-check text-truncate">
+                             <input class="form-check-input me-2" type="checkbox" value="${item.path}" id="modal-chk-${item.path.replace(/[^a-zA-Z0-9]/g, '_')}" ${isSelected ? 'checked' : ''} onclick="toggleModalItemSelection('${item.path}', this)">
+                             <label class="form-check-label text-truncate" for="modal-chk-${item.path.replace(/[^a-zA-Z0-9]/g, '_')}" style="width: 100%;">
+                                 <i class="bi bi-file-earmark-music-fill me-1 text-info"></i>
+                                 <span class="text-truncate">${item.name}</span>
+                             </label>
+                         </div>
+                        <span></span> <!-- Placeholder for alignment -->
+                    `;
+                }
+                 li.innerHTML = content;
+                modalFileList.appendChild(li);
+            });
+        }
+        
+        function toggleModalItemSelection(itemPath, checkbox) {
+            if (checkbox.checked) {
+                selectedModalItems.add(itemPath);
+            } else {
+                selectedModalItems.delete(itemPath);
+            }
+            updateModalSelectionUI();
+        }
+        
+         function updateModalSelectionUI() {
+             const count = selectedModalItems.size;
+             modalSelectionInfo.textContent = `${count} Datei(en) ausgewählt.`;
+             modalSaveButton.disabled = count === 0;
+         }
+
+        // --- Function to save selected files to the current playlist ---
+        function saveModalSelectionToPlaylist() {
+            if (!currentPlaylistId) {
+                alert("Keine Playlist ausgewählt oder geladen.");
+                return;
+            }
+            const filesToAdd = Array.from(selectedModalItems);
+            if (filesToAdd.length === 0) {
+                alert("Keine Dateien zum Hinzufügen ausgewählt.");
+                return;
+            }
+
+            console.log(`Modal: Adding ${filesToAdd.length} files to Playlist ID: ${currentPlaylistId}`);
+            const saveButton = modalSaveButton;
+            const spinner = saveButton.querySelector('.spinner-border');
+            saveButton.disabled = true;
+            spinner.style.display = 'inline-block';
+
+            // Use the existing BATCH API endpoint to add items
+            fetch(`/api/playlists/${currentPlaylistId}/items/batch`, { // Use the /batch endpoint
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                 // Use the key expected by the batch endpoint
+                body: JSON.stringify({ mp3_files: filesToAdd }) 
+            })
+            .then(response => {
+                 if (!response.ok) {
+                    // Attempt to read error message from response
+                    return response.json().then(errData => {
+                         throw new Error(errData.error || `Serverfehler: ${response.status}`);
+                    }).catch(() => {
+                         // Fallback if error response is not JSON
+                         throw new Error(`Serverfehler: ${response.status}`);
+                    });
+                 } 
+                return response.json();
+            })
+            .then(data => {
+                console.log("Modal: Add items response:", data);
+                alert(`${filesToAdd.length} Datei(en) erfolgreich zur Playlist hinzugefügt.`);
+                addToPlaylistModal.hide(); // Close the modal
+                // Reload the main playlist view to show the new items
+                loadPlaylistForTag(currentTagId);
+                // Optional: Clear selection in modal (already done on modal open)
+                // selectedModalItems.clear();
+                // updateModalSelectionUI();
+            })
+            .catch(error => {
+                console.error("Modal: Error adding files to playlist:", error);
+                alert(`Fehler beim Hinzufügen: ${error.message}`);
+            })
+            .finally(() => {
+                 saveButton.disabled = false; // Re-enable button
+                 spinner.style.display = 'none';
+            });
+        }
+
         // Initialisierung beim Laden der Seite
         loadTags();
     </script>
